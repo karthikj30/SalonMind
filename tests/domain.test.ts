@@ -234,3 +234,33 @@ test("AES-256-GCM field encryption: round-trip, random IV, tamper detection", ()
   assert.throws(() => decryptField(tampered), "GCM auth tag rejects tampering");
   delete process.env.DATA_ENCRYPTION_KEY;
 });
+
+import { parseWorkflow, sanitizePlan } from "../src/lib/domain/workflow.ts";
+
+const AG = ["inventory", "negotiator", "waste", "concierge", "churn", "retention", "loyalty", "reputation", "noshow", "deals", "waitlist", "recruiter", "performance", "billing", "gst", "optimizer"];
+
+test("Workflow designer: plain-language prompt → agent toggles + parameters", () => {
+  const p = parseWorkflow("Turn off the waitlist agent and pause flash deals, ask for a 40% deposit and cap surge at 30%", AG);
+  assert.deepEqual(p.disable.sort(), ["deals", "waitlist"]);
+  assert.deepEqual(p.settings, { deposit_pct: 40, surge_cap_pct: 30 });
+  const q = parseWorkflow("Turn the waitlist back on; give 2 points per ₹100 and a referral bonus of 500", AG);
+  assert.deepEqual(q.enable, ["waitlist"]);
+  assert.deepEqual(q.settings, { loyalty_points_per_100: 2, referral_bonus_points: 500 });
+  assert.equal(parseWorkflow("stop birthday offers", AG).disable[0], "retention");
+});
+
+test("Workflow designer: protected agents and out-of-range values are refused", () => {
+  const s = sanitizePlan({ disable: ["billing", "waitlist", "hacker"], settings: { deposit_pct: 250, gst_rate: 0, nudge_threshold: 0.2 } }, AG);
+  assert.deepEqual(s.disable, ["waitlist"]);
+  assert.deepEqual(s.settings, { deposit_pct: 100, nudge_threshold: 0.2 });
+  assert.ok(s.notes.some((n) => /billing stays on/.test(n)) && s.notes.some((n) => /gst_rate/.test(n)));
+});
+
+import { toEnglishQuery } from "../src/lib/i18n/concierge.ts";
+
+test("Marketplace queries in Indian languages parse without an LLM", () => {
+  for (const q of ["कल शाम 1500 से कम में फेशियल", "उद्या संध्याकाळी 1500 पर्यंत फेशियल", "நாளை மாலை 1500-க்குள் ஃபேஷியல்", "రేపు సాయంత్రం 1500 లోపు ఫేషియల్", "আগামীকাল সন্ধ্যায় ১৫০০-এর মধ্যে ফেসিয়াল", "kal shaam facial 1500 ke andar"]) {
+    const i = parseIntent(toEnglishQuery(q), []);
+    assert.equal(i.maxPrice, 1500, q); assert.equal(i.fromTime, "17:00", q); assert.ok(i.date, q); assert.match(i.service, /facial/, q);
+  }
+});

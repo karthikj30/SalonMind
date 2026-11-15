@@ -19,7 +19,7 @@ const { createBooking, findOrCreateClient, planBooking, logPastVisit, reschedule
 const { importClients } = await import("../../src/lib/services/clientsImport");
 const { receiveMessage } = await import("../../src/lib/agents/crm");
 const { computePayroll, screeningTurn } = await import("../../src/lib/agents/hr");
-const { generateLayout } = await import("../../src/lib/agents/platform");
+const { generateLayout, configureWorkflow } = await import("../../src/lib/agents/platform");
 const { searchMarketplace } = await import("../../src/lib/services/marketplace");
 const { issueInvoice } = await import("../../src/lib/services/invoicing");
 const { embed, toPgVector } = await import("../../src/lib/ai/embeddings");
@@ -476,6 +476,26 @@ describe("Platform — orchestrator, self-optimizer, generative UI, multi-tenanc
     await runAgent(agent("optimizer"), ctx());
     await refresh();
     assert.ok(tenant.settings.deposit_threshold < before, `${tenant.settings.deposit_threshold} < ${before}`);
+  });
+
+  test("Workflow designer: plain-language instruction pauses agents and tunes parameters", async () => {
+    const r = await configureWorkflow(db, tenant, "Turn off the waitlist agent and ask for a 40% deposit; also try to disable billing");
+    await refresh();
+    assert.ok(tenant.settings.agents_disabled.includes("waitlist"));
+    assert.ok(!tenant.settings.agents_disabled.includes("billing"), "billing is protected");
+    assert.equal(tenant.settings.deposit_pct, 40);
+    assert.ok(r.plan.notes.some((n) => /billing stays on/.test(n)));
+    // paused agent no longer reacts to its event
+    const c = await findOrCreateClient(db, tenant.id, { name: "Paused Pooja", phone: "+919811100030" });
+    await ins("waitlist", { client_id: c.id, service_id: ids.haircut, date: addDays(today, 2) });
+    const b = await createBooking(db, tenant, { client_id: ids.priya, service_id: ids.haircut, date: addDays(today, 2), time: "12:00", source: "walkin" });
+    await db.from("bookings").update({ status: "cancelled" }).eq("id", b.booking.id);
+    await emit(db, tenant.id, "booking.cancelled", { booking_id: b.booking.id }, "test");
+    await processEvents(db, tenant);
+    assert.equal((await db.from("waitlist").select("status").eq("client_id", c.id).single()).data!.status, "waiting", "paused waitlist agent made no offer");
+    await configureWorkflow(db, tenant, "turn the waitlist back on");
+    await refresh();
+    assert.ok(!tenant.settings.agents_disabled.includes("waitlist"));
   });
 
   test("Generative micro-frontend only uses registry widgets", async () => {

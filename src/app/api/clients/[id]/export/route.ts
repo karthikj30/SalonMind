@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { decryptField } from "@/lib/security/crypto";
+import { safeDecrypt as decryptField } from "@/lib/security/crypto";
 
 /** DPDP Act — right to access: export everything held about one client (RLS restricts to own tenant). */
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {

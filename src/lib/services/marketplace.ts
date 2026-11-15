@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { embed, toPgVector } from "../ai/embeddings";
 import { extractJson, llm, llmJson } from "../ai/llm";
 import { parseIntent, type SearchIntent } from "../domain/intent";
+import { toEnglishQuery } from "../i18n/concierge";
 import { planBooking } from "./booking";
 import { normalizeTenant } from "../agents/runtime";
 import type { Tenant } from "../agents/types";
@@ -45,7 +46,9 @@ export async function searchMarketplace(db: SupabaseClient, q: string, image?: {
   }
   const { data: tenantsAll } = await db.from("tenants").select("*").eq("is_published", true);
   const cities = [...new Set((tenantsAll ?? []).map((t) => t.city).filter(Boolean))] as string[];
-  const fallback = parseIntent(query, cities);
+  const englishQuery = toEnglishQuery(query);
+  if (englishQuery !== query) trace.push(`multilingual keywords: "${englishQuery}"`);
+  const fallback = parseIntent(englishQuery, cities);
   const ext = await llmJson<SearchIntent>({
     system: `Extract a salon search intent. Today is ${todayIst()} (IST). Known cities: ${cities.join(", ") || "none"}. Return JSON {service: short English service keywords, maxPrice: number|null (INR), city: one of the known cities or null, date: YYYY-MM-DD|null, fromTime: HH:MM|null, toTime: HH:MM|null, gender: "men"|"women"|null}. "evening" = 17:00-21:00, "morning" = 09:00-12:00, "afternoon" = 12:00-17:00, "tonight"/"this evening" means today. Translate Hindi/Tamil/etc. to English keywords.`,
     messages: [{ role: "user", content: query }], temperature: 0,
@@ -55,12 +58,12 @@ export async function searchMarketplace(db: SupabaseClient, q: string, image?: {
   trace.push(`intent (${ext.provider}): ${JSON.stringify(intent)}`);
 
   // hybrid retrieval
-  const e = await embed(intent.service || query);
+  const e = await embed(intent.service || englishQuery);
   const { data: matches } = await db.rpc("match_services", { query_embedding: toPgVector(e.vector), p_model: e.model, match_count: 60 });
   const sim = new Map<string, number>((matches ?? []).map((m: { service_id: string; similarity: number }) => [m.service_id, m.similarity]));
   trace.push(`vector search (${e.model}): ${sim.size} candidates`);
   const { data: services } = await db.from("services").select("id, tenant_id, name, category, description, base_price, duration_min").eq("active", true);
-  const words = (intent.service || query).toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+  const words = (intent.service || englishQuery).toLowerCase().split(/\s+/).filter((w) => w.length > 2);
   const { data: deals } = await db.from("deals").select("tenant_id, service_id, title, discount_pct").eq("active", true).gte("valid_to", new Date().toISOString());
 
   const tmap = new Map((tenantsAll ?? []).map((t) => [t.id, t]));

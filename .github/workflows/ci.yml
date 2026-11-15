@@ -16,6 +16,8 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
+      - name: Validate Kubernetes manifests
+        run: pip install --quiet pyyaml && python3 scripts/validate_k8s.py
       # Real-DB integration tests run only when the repo has these secrets configured
       - name: Integration tests (real Supabase)
         if: ${{ env.AGENT_BOT_PASSWORD != '' }}
@@ -25,3 +27,12 @@ jobs:
           AGENT_BOT_EMAIL: ${{ secrets.AGENT_BOT_EMAIL }}
           AGENT_BOT_PASSWORD: ${{ secrets.AGENT_BOT_PASSWORD }}
         run: node --conditions=react-server --import tsx --test --test-concurrency=1 tests/integration/*.test.mts
+
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build web image
+        run: docker build -t salonmind-web:ci --build-arg NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=ci .
+      - name: Build agent-worker image
+        run: docker build -t salonmind-worker:ci -f services/agent-worker/Dockerfile .

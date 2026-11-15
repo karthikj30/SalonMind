@@ -39,3 +39,8 @@ export function decryptField(v: string | null | undefined): string | null {
   d.setAuthTag(raw.subarray(12, 28));
   return Buffer.concat([d.update(raw.subarray(28)), d.final()]).toString("utf8");
 }
+
+/** Like decryptField, but never throws (wrong key or tampered value → placeholder) — for agents and pages. */
+export function safeDecrypt(v: string | null | undefined): string | null {
+  try { return decryptField(v); } catch { return "[encrypted — key mismatch]"; }
+}

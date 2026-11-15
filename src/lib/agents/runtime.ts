@@ -54,7 +54,8 @@ export async function processEvents(db: SupabaseClient, tenant: Tenant, maxEvent
       const { data: claimed } = await db.from("agent_events").update({ status: "processing" })
         .eq("id", ev.id).eq("status", "pending").select("id");
       if (!claimed?.length) continue;
-      const subs = AGENTS.filter((a) => a.subscribes.includes(ev.type));
+      const off = tenant.settings.agents_disabled ?? [];
+      const subs = AGENTS.filter((a) => a.subscribes.includes(ev.type) && !off.includes(a.id));
       let err: string | null = null;
       for (const a of subs) {
         const r = await runAgent(a, { db, tenant, trigger: `event:${ev.type}` }, ev);
@@ -70,7 +71,8 @@ export async function processEvents(db: SupabaseClient, tenant: Tenant, maxEvent
 /** Orchestrator tick: run every periodic agent for a tenant, then drain the event bus. */
 export async function tick(db: SupabaseClient, tenant: Tenant, only?: string[]) {
   const results: { agent: string; summary: string }[] = [];
-  for (const a of AGENTS.filter((x) => x.periodic && (!only || only.includes(x.id)))) {
+  const off = tenant.settings.agents_disabled ?? [];
+  for (const a of AGENTS.filter((x) => x.periodic && (!only || only.includes(x.id)) && (only || !off.includes(x.id)))) {
     const r = await runAgent(a, { db, tenant, trigger: only ? "manual" : "schedule" });
     results.push({ agent: a.id, summary: r.summary });
   }

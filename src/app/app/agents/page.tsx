@@ -22,9 +22,9 @@ export default async function Agents({ searchParams }: { searchParams: Promise<R
         <form action={drainQueue}><SubmitButton variant="secondary">Retry / drain queue</SubmitButton></form>
       </PageHeader>
       <Flash msg={sp.msg} error={sp.error} />
-      <Card title="LLM providers (free tiers)" className="mb-4">
+      <Card title="LLM providers (LangChain.js gateway)" className="mb-4">
         <div className="flex flex-wrap gap-2 text-xs">
-          {providerStatus().map((p) => <Badge key={p.name} tone={p.configured ? "green" : "slate"}>{p.name}{p.vision ? " 👁" : ""}: {p.configured ? "configured" : "no key"}</Badge>)}
+          {providerStatus().map((p) => <Badge key={p.name} tone={p.configured ? "green" : "slate"}>{p.name}{p.vision ? " 👁" : ""} · {p.tier}: {p.configured ? "configured" : "no key"}</Badge>)}
           <Badge tone="violet">rules-engine: always on (fallback)</Badge>
         </div>
       </Card>
@@ -36,6 +36,7 @@ export default async function Agents({ searchParams }: { searchParams: Promise<R
                 <li key={a.id} className="text-sm">
                   <div className="flex items-center justify-between gap-2">
                     <a href={`?agent=${a.id}`} className="font-medium hover:text-brand-600">{a.name}</a>
+                    {(tenant.settings.agents_disabled ?? []).includes(a.id) && <Badge tone="amber">paused</Badge>}
                     {a.periodic ? <form action={runAgentNow}><input type="hidden" name="agent" value={a.id} /><SubmitButton variant="secondary" className="!px-2 !py-0.5 text-xs">Run</SubmitButton></form> : <Badge>event-driven</Badge>}
                   </div>
                   <p className="text-xs text-brand-900/55">{a.description}</p>

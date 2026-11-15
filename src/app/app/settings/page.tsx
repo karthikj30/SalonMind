@@ -1,5 +1,6 @@
 import { getTenantContext } from "@/lib/tenant";
-import { Card, Field, Flash, Input, PageHeader, Select, Textarea } from "@/components/ui";
+import { Badge, Card, Field, Flash, Input, PageHeader, Select, Textarea } from "@/components/ui";
+import { fmtDateTime } from "@/lib/time";
 import { SubmitButton } from "@/components/SubmitButton";
 import { reindexServices, updateSalon, updateSettings } from "../actions";
 import { deleteMyAccount } from "../../auth-actions";
@@ -23,7 +24,8 @@ const PARAMS: [string, string, string][] = [
 
 export default async function Settings({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const sp = await searchParams;
-  const { tenant } = await getTenantContext();
+  const { db, tenant } = await getTenantContext();
+  const audit = await db.from("audit_log").select("*").eq("tenant_id", tenant.id).order("at", { ascending: false }).limit(25);
   return (
     <>
       <PageHeader eyebrow="AI" title="Settings" subtitle="Salon profile (also your public marketplace page) and the parameters agents operate within. The Self-Optimizing Agent tunes some of these automatically from your data." />
@@ -57,6 +59,20 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <Card title="AI search index">
             <p className="mb-2 text-sm text-brand-900/65">Active embedding model: <code>{embeddingModel()}</code>. Re-index after adding a GEMINI_API_KEY to upgrade from local hashed embeddings to semantic embeddings.</p>
             <form action={reindexServices}><SubmitButton variant="secondary">Re-index services</SubmitButton></form>
+          </Card>
+          <Card title="Audit log (append-only)">
+            {audit.error ? (
+              <p className="text-xs text-brand-900/60">Not enabled yet — apply <code>supabase/migrations/0007_audit_log.sql</code> in the Supabase SQL editor to start recording every change to clients, staff, invoices and payroll.</p>
+            ) : (audit.data ?? []).length ? (
+              <ul className="max-h-64 space-y-1 overflow-y-auto text-xs">
+                {(audit.data ?? []).map((e) => (
+                  <li key={e.id} className="flex justify-between gap-2 border-b border-brand-50 py-1">
+                    <span><Badge tone={e.actor_type === "agent" ? "violet" : e.actor_type === "user" ? "blue" : "slate"}>{e.actor_type}</Badge> {e.op} <b>{e.table_name}</b>{e.changed_fields?.length ? ` · ${e.changed_fields.slice(0, 4).join(", ")}${e.changed_fields.length > 4 ? "…" : ""}` : ""}</span>
+                    <span className="shrink-0 text-brand-900/45">{fmtDateTime(e.at)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="text-xs text-brand-900/50">No changes recorded yet.</p>}
           </Card>
           <Card title="Security & compliance">
             <ul className="list-disc space-y-1 pl-4 text-xs text-brand-900/65">

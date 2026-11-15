@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Staff } from "../domain/types";
 import { payrollLine } from "../domain/payroll";
 import { statutory } from "../domain/statutory";
-import { decryptField } from "../security/crypto";
+import { safeDecrypt as decryptField } from "../security/crypto";
 import { llm, llmJson, extractJson } from "../ai/llm";
 import { istDate, timeToMin } from "../time";
 

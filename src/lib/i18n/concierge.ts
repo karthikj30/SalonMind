@@ -172,3 +172,23 @@ export function ruleIntent(text: string, langHint?: string | null): RuleIntent {
 
 export const isYes = (t: string) => KW.yes.test(t);
 export const isNo = (t: string) => KW.no.test(t);
+
+const QUERY_MAP: [RegExp, string][] = [
+  [/आगामीकाल|आगामी काल|আগামীকাল|उद्या|नाळै|நாளை|రేపు|\bkal\b|कल/gi, " tomorrow "],
+  [/आज|இன்று|ఈరోజు|ఈ రోజు|আজ|\baaj\b/gi, " today "],
+  [/शाम|संध्याकाळी|संध्याकाळ|மாலை|సాయంత్రం|সন্ধ্যায়|সন্ধ্যা|\bshaam\b/gi, " evening "],
+  [/सुबह|सकाळी|காலை|ఉదయం|সকালে|সকাল|\bsubah\b/gi, " morning "],
+  [/दोपहर|दुपारी|மதியம்|మధ్యాహ్నం|দুপুরে|দুপুর/gi, " afternoon "],
+];
+
+/**
+ * Turn an Indian-language marketplace query into English search keywords for the rules-engine parser
+ * ("कल शाम 1500 से कम में फेशियल" → "tomorrow evening under 1500 facial"). The LLM path reads the raw text.
+ */
+export function toEnglishQuery(q: string): string {
+  let s = q.replace(/[০-৯]/g, (d) => String("০১২৩৪৫৬৭৮৯".indexOf(d))).replace(/[०-९]/g, (d) => String("०१२३४५६७८९".indexOf(d)));
+  s = s.replace(/(\d[\d,]*)\s*(?:-|\s)?(?:से कम|से नीचे|के अंदर|के भीतर|पर्यंत|पेक्षा कमी|க்குள்|லோபு|లోపు|এর মধ্যে|এর কমে|\bse kam\b|\bke andar\b|\btak\b)/gi, " under $1 ");
+  for (const [re, en] of QUERY_MAP) s = s.replace(re, en);
+  for (const [re, keys] of SERVICE_WORDS) s = s.replace(new RegExp(re.source, "gi"), ` ${keys[0]} `);
+  return s.replace(/\s+/g, " ").trim();
+}

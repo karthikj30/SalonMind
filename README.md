@@ -10,6 +10,7 @@ on free tiers**.
 * **Architecture & RFP mapping:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 * **Antigravity master prompt (plan & build):** [`docs/ANTIGRAVITY_PROMPT.md`](docs/ANTIGRAVITY_PROMPT.md) · rules in [`.agent/`](.agent)
 * **Manual test script:** [`docs/TESTING.md`](docs/TESTING.md)
+* **Proposal (timeline, costs, token projections):** [`docs/PROPOSAL.md`](docs/PROPOSAL.md)
 * **RFP → code → test traceability:** [`docs/RFP_COVERAGE.md`](docs/RFP_COVERAGE.md) · **market research:** [`docs/RESEARCH.md`](docs/RESEARCH.md)
 
 ## Look & feel
@@ -75,8 +76,9 @@ After adding `GEMINI_API_KEY`, click **Settings → Re-index services** to switc
 ## Tests
 
 ```bash
-npm run typecheck && npm test && npm run build      # 27 unit tests (GST, payroll, scheduler, pricing, loyalty…)
-npm run test:integration                            # 37 tests against the real Supabase DB — every RFP bullet + tenant isolation
+npm run typecheck && npm test && npm run build      # 30 unit tests (GST, payroll, scheduler, pricing, loyalty…)
+npm run test:integration                            # 38 tests against the real Supabase DB
+python3 scripts/validate_k8s.py                      # static validation of the Kubernetes manifests — every RFP bullet + tenant isolation
 BASE_URL=http://localhost:3000 node tests/e2e.mjs   # browser E2E through the real UI (cleans up via account deletion)
 ```
 

@@ -9,7 +9,7 @@ import { importClients } from "@/lib/services/clientsImport";
 import { encryptField } from "@/lib/security/crypto";
 import { receiveMessage } from "@/lib/agents/crm";
 import { computePayroll, screeningTurn } from "@/lib/agents/hr";
-import { generateLayout } from "@/lib/agents/platform";
+import { configureWorkflow, generateLayout, setAgentEnabled } from "@/lib/agents/platform";
 import { embed, embeddingModel, toPgVector } from "@/lib/ai/embeddings";
 import { sendMessage } from "@/lib/services/messaging";
 import { addDays, istDate, todayIst, toIst } from "@/lib/time";
@@ -358,7 +358,7 @@ export async function updateSettings(fd: FormData) {
   const { db, tenant } = await getTenantContext();
   const next = { ...tenant.settings };
   for (const k of Object.keys(next) as (keyof typeof next)[]) {
-    if (fd.get(k) === null) continue;
+    if (fd.get(k) === null || Array.isArray(next[k])) continue;
     (next as Record<string, unknown>)[k] = k === "default_language" ? s(fd, k) : n(fd, k);
   }
   await db.from("tenants").update({ settings: next }).eq("id", tenant.id);
@@ -505,4 +505,21 @@ export async function setConversationStatus(fd: FormData) {
   const handle = s(fd, "handle"), status = s(fd, "status") === "human" ? "human" : "ai";
   await db.from("conversations").upsert({ tenant_id: tenant.id, contact_handle: handle, status, reason: status === "human" ? "taken over by staff" : null, unclear_count: 0, updated_at: new Date().toISOString() });
   done(`/app/inbox?h=${encodeURIComponent(handle)}`, status === "ai" ? "Handed back to the AI concierge." : "You are now handling this conversation; the AI will stay silent.");
+}
+
+// ───────────── Workflow designer (plain-language configuration) ─────────────
+export async function configureWorkflowAction(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  const prompt = s(fd, "prompt");
+  if (!prompt) fail("/app/studio", "Describe what you want to change");
+  const r = await configureWorkflow(db, tenant, prompt);
+  if (!r.changed) fail("/app/studio", `Nothing to change understood from that${r.plan.notes.length ? " — " + r.plan.notes.join(" ") : ""}. Try e.g. "turn off the waitlist and ask for a 40% deposit".`);
+  done("/app/studio", `Applied ${r.changed} change(s): ${r.actions.filter((a) => a.type !== "note").map((a) => a.label).join("; ")}${r.plan.notes.length ? " · " + r.plan.notes.join(" ") : ""}`);
+}
+
+export async function toggleAgent(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  const plan = await setAgentEnabled(db, tenant, s(fd, "agent"), s(fd, "enabled") === "true");
+  if (plan.notes.length) fail("/app/studio", plan.notes.join(" "));
+  done("/app/studio", `${s(fd, "agent")} ${s(fd, "enabled") === "true" ? "resumed" : "paused"}.`);
 }
