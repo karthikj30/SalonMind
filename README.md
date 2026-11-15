@@ -6,6 +6,7 @@ scheduling, yield pricing, no-show mitigation, recruitment, payroll, GST billing
 marketplace with natural-language and photo search. Built from the RFP in this repo and runs **entirely
 on free tiers**.
 
+* **Live:** https://salonmind-khaki.vercel.app (owner app at `/signup`, consumer marketplace at `/marketplace`)
 * **Architecture & RFP mapping:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 * **Antigravity master prompt (plan & build):** [`docs/ANTIGRAVITY_PROMPT.md`](docs/ANTIGRAVITY_PROMPT.md) · rules in [`.agent/`](.agent)
 * **Manual test script:** [`docs/TESTING.md`](docs/TESTING.md)
