@@ -40,6 +40,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
             <Field label="Closes"><Input name="close_time" type="time" defaultValue={tenant.close_time.slice(0, 5)} /></Field>
             <Field label="Address" className="col-span-2"><Input name="address" defaultValue={tenant.address ?? ""} /></Field>
             <Field label="Description" className="col-span-2"><Textarea name="description" defaultValue={tenant.description ?? ""} /></Field>
+            <Field label="UPI ID (VPA)" hint="Deposit & bill links/QR: upi://pay — works with any UPI app, zero fees" className="col-span-2"><Input name="upi_vpa" defaultValue={tenant.upi_vpa ?? ""} placeholder="glowstudio@okhdfcbank" /></Field>
             <Field label="Google review link" hint="Reputation Agent sends it to happy (4–5★) clients" className="col-span-2"><Input name="google_review_url" type="url" defaultValue={tenant.google_review_url ?? ""} placeholder="https://g.page/r/…/review" /></Field>
             <label className="col-span-2 flex items-center gap-2 text-sm"><input type="checkbox" name="is_published" defaultChecked={tenant.is_published} /> Listed on the consumer marketplace</label>
             <div className="col-span-2 flex items-center gap-3"><SubmitButton>Save</SubmitButton><a href={`/s/${tenant.slug}`} className="text-xs text-brand-600" target="_blank">View public page ↗</a></div>

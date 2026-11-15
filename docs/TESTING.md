@@ -85,6 +85,19 @@ Everything below is entered by hand in the UI so you can watch each agent react.
 35. Give a client a birthday within 7 days → *Run Campaign Agent* → birthday offer.
 36. **Settings → Delete my account** (type DELETE) removes the account and its salons (DPDP).
 
+## 11. Ported from open source
+37. **Two-phase AI booking**: in the Inbox send `kal 11am men's haircut book kar do` → the concierge *proposes*
+    (nothing on the schedule yet) → send `yes` from the same number → booked. `no` cancels the proposal.
+38. **Human handoff**: send a complaint (`worst service, I want a refund`) → thread shows 👤 human handling and the
+    AI stops replying; click *Hand back to AI* to resume. Two unintelligible messages in a row also escalate.
+39. **UPI**: Settings → UPI ID (e.g. `yourname@okhdfcbank`). Risky bookings now get a `upi://pay` deposit link
+    in the WhatsApp nudge, a *UPI link* on the Bookings page, and a scannable QR on the public booking confirmation.
+40. **Statutory payroll**: Staff → set gender / PF / ESI → Run payroll → PF, ESI and state professional tax
+    columns, net pay and employer cost.
+41. **CSV import**: Clients → upload an export from Fresha/Vagaro/Booksy/Excel (Name/First+Last, Mobile, Email, DOB).
+42. **Calendar feed**: Staff → copy a stylist's `.ics` URL → Google Calendar → *Other calendars → From URL*.
+43. **Style advisor**: Marketplace → tick *Style advisor* → upload a selfie (needs a free Groq/Gemini key).
+
 ## Automated checks
 ```bash
 npm run typecheck && npm test && npm run build

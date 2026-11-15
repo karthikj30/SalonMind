@@ -16,6 +16,7 @@ if (!process.env.USE_LLM_IN_TESTS) for (const k of ["GROQ_API_KEY", "GEMINI_API_
 const { AGENTS } = await import("../../src/lib/agents/registry");
 const { normalizeTenant, processEvents, runAgent, emit, tick } = await import("../../src/lib/agents/runtime");
 const { createBooking, findOrCreateClient, planBooking, logPastVisit, rescheduleBooking } = await import("../../src/lib/services/booking");
+const { importClients } = await import("../../src/lib/services/clientsImport");
 const { receiveMessage } = await import("../../src/lib/agents/crm");
 const { computePayroll, screeningTurn } = await import("../../src/lib/agents/hr");
 const { generateLayout } = await import("../../src/lib/agents/platform");
@@ -55,7 +56,7 @@ before(async () => {
   assert.ifError(error);
   const { data, error: e2 } = await db.from("tenants").insert({
     name: `IT Salon ${ts}`, slug: `it-salon-${ts}`, city: "Pune", state: "Maharashtra", state_code: "27", gstin: "27AAAAA0000A1Z5",
-    is_published: true, google_review_url: "https://g.page/r/it-test/review",
+    is_published: true, google_review_url: "https://g.page/r/it-test/review", upi_vpa: "itsalon@okhdfcbank",
   }).select("*").single();
   assert.ifError(e2);
   tenant = normalizeTenant(data as Tenant);
@@ -90,6 +91,16 @@ describe("Module 3 — scheduling, pricing, no-show", () => {
     await assert.rejects(createBooking(db, tenant, { client_id: c.id, service_id: ids.balayage, date: tomorrow, time: "12:00", source: "walkin" }), /No stylist/);
   });
 
+  test("Postgres exclusion constraint makes double-booking impossible (even bypassing the scheduler)", async () => {
+    const { data: b } = await db.from("bookings").select("*").eq("id", ids.b1).single();
+    const { error } = await db.from("bookings").insert({ tenant_id: tenant.id, client_id: ids.priya, service_id: ids.balayage, staff_id: b!.staff_id,
+      start_at: new Date(new Date(b!.start_at).getTime() + 30 * 60000).toISOString(), end_at: new Date(new Date(b!.end_at).getTime() + 30 * 60000).toISOString(), status: "booked" });
+    assert.ok(error && /no_staff_overlap/.test(error.message), error?.message);
+    const { error: roomErr } = await db.from("bookings").insert({ tenant_id: tenant.id, client_id: ids.priya, service_id: ids.balayage, room_id: ids.bay, staff_id: null,
+      start_at: b!.start_at, end_at: b!.end_at, status: "confirmed" });
+    assert.ok(roomErr && /no_room_overlap/.test(roomErr.message), roomErr?.message);
+  });
+
   test("Staff leave blocks the scheduler", async () => {
     await ins("staff_time_off", { staff_id: ids.neha, start_at: istDate(tomorrow, "00:00").toISOString(), end_at: istDate(tomorrow, "23:59").toISOString(), reason: "sick" });
     const plan = await planBooking(db, tenant, { service_id: ids.facial, date: tomorrow }, 30);
@@ -107,6 +118,7 @@ describe("Module 3 — scheduling, pricing, no-show", () => {
     assert.ok(Number(b!.deposit_required) > 0);
     const { data: m } = await db.from("messages").select("body").eq("client_id", c.id).eq("agent", "noshow");
     assert.ok(m!.length >= 1 && /deposit/i.test(m![0].body));
+    assert.match(m![0].body, /upi:\/\/pay\?pa=itsalon%40okhdfcbank&pn=IT%20Salon/, "deposit nudge carries an NPCI UPI link");
   });
 
   test("Yield management: cancellation → last-minute deal; waitlist offered the slot; YES books it", async () => {
@@ -289,10 +301,64 @@ describe("Module 2 — CRM, churn, unified inbox", () => {
       const { data } = await db.from("messages").select("body").eq("tenant_id", tenant.id).eq("contact_handle", handle).eq("direction", "out");
       assert.ok(data!.length >= 1, `${channel} got a reply`);
     }
-    const { data: bk } = await db.from("bookings").select("start_at, source, clients!inner(phone)").eq("tenant_id", tenant.id).eq("clients.phone", "+919811100011");
-    assert.equal(bk!.length, 1); assert.equal(bk![0].source, "whatsapp"); assert.equal(toIst(new Date(bk![0].start_at)).time, "10:00");
+    // two-phase: the AI only PROPOSED — nothing is booked until the customer says yes
+    const q = () => db.from("bookings").select("start_at, source, clients!inner(phone)").eq("tenant_id", tenant.id).eq("clients.phone", "+919811100011");
+    assert.equal((await q()).data!.length, 0, "no booking before explicit confirmation");
+    const { data: prop } = await db.from("booking_proposals").select("status, time").eq("contact_handle", "+919811100011").single();
+    assert.equal(prop!.status, "pending"); assert.equal(prop!.time.slice(0, 5), "10:00");
+    await receiveMessage(db, tenant.id, { channel: "whatsapp", handle: "+919811100011", body: "haan, confirm" });
+    await processEvents(db, tenant);
+    const bk = (await q()).data!;
+    assert.equal(bk.length, 1); assert.equal(bk[0].source, "whatsapp"); assert.equal(toIst(new Date(bk[0].start_at)).time, "10:00");
+    assert.equal((await db.from("booking_proposals").select("status").eq("contact_handle", "+919811100011").single()).data!.status, "confirmed");
     const { data: price } = await db.from("messages").select("body").eq("contact_handle", "@insta_meera").eq("direction", "out");
     assert.match(price![0].body, /900|facial/i);
+  });
+});
+
+describe("Human handoff (Kontor pattern)", () => {
+  test("Complaint escalates to a human; AI stays silent until handed back", async () => {
+    const h = "+919811100012";
+    await receiveMessage(db, tenant.id, { channel: "whatsapp", handle: h, body: "Worst experience, staff was rude. I want a refund" });
+    await processEvents(db, tenant);
+    const conv = (await db.from("conversations").select("status, reason").eq("tenant_id", tenant.id).eq("contact_handle", h).single()).data!;
+    assert.equal(conv.status, "human"); assert.equal(conv.reason, "complaint");
+    const outs = async () => (await db.from("messages").select("id").eq("contact_handle", h).eq("direction", "out")).data!.length;
+    const n1 = await outs();
+    await receiveMessage(db, tenant.id, { channel: "whatsapp", handle: h, body: "hello??" });
+    await processEvents(db, tenant);
+    assert.equal(await outs(), n1, "AI did not reply while a human owns the thread");
+    await db.from("conversations").update({ status: "ai" }).eq("tenant_id", tenant.id).eq("contact_handle", h);
+    await receiveMessage(db, tenant.id, { channel: "whatsapp", handle: h, body: "hi" });
+    await processEvents(db, tenant);
+    assert.equal(await outs(), n1 + 1);
+  });
+
+  test("Two unclear messages in a row escalate", async () => {
+    const h = "@confused_user";
+    for (const body of ["asdf qwerty", "zzz ???"]) { await receiveMessage(db, tenant.id, { channel: "instagram", handle: h, body }); await processEvents(db, tenant); }
+    assert.equal((await db.from("conversations").select("status").eq("tenant_id", tenant.id).eq("contact_handle", h).single()).data!.status, "human");
+  });
+});
+
+describe("Ported from open source", () => {
+  test("CSV client import (Fresha/Booksy-style export) with dedupe", async () => {
+    const csv = "First Name,Last Name,Mobile Number,Email,Date of Birth\nAnita,Desai,9822001100,anita@x.in,02/03/1990\nPriya,Dup,+919811100001,,\nNo,Phone,,,\n";
+    const r = await importClients(db, tenant.id, csv, false);
+    assert.equal(r.imported, 2); assert.equal(r.duplicates, 1, "Priya's phone already exists");
+    const { data } = await db.from("clients").select("name, birthday, consent_marketing").eq("tenant_id", tenant.id).eq("phone", "+919822001100").single();
+    assert.equal(data!.name, "Anita Desai"); assert.equal(data!.birthday, "1990-03-02"); assert.equal(data!.consent_marketing, false);
+    assert.equal((await importClients(db, tenant.id, csv, false)).imported, 1, "re-import only re-adds the phoneless row");
+  });
+
+  test("Stylist ICS feed (needs BASE_URL of a running app)", { skip: !process.env.BASE_URL }, async () => {
+    const { data: st } = await db.from("staff").select("calendar_token").eq("id", ids.asha).single();
+    assert.match(st!.calendar_token, /^[a-f0-9]{32}$/);
+    const res = await fetch(`${process.env.BASE_URL}/api/ics/${st!.calendar_token}.ics`);
+    assert.equal(res.status, 200);
+    const body = await res.text();
+    assert.match(body, /BEGIN:VCALENDAR/); assert.match(body, /SUMMARY:Balayage — Priya/);
+    assert.equal((await fetch(`${process.env.BASE_URL}/api/ics/${"0".repeat(32)}.ics`)).status, 404);
   });
 });
 
@@ -320,7 +386,12 @@ describe("Module 4 — recruitment, payroll, performance", () => {
     assert.equal(ravi.type, "booth_renter");
     assert.ok(ravi.booth_payout > 0 && ravi.tips === 100 && ravi.product_revenue > 0);
     const neha = p.lines.find((l) => l.staff_id === ids.neha)!;
-    assert.equal(neha.net, 12000 - 500);
+    // Maharashtra employee on ₹12,000: PF 12% = 1440, ESI 0.75% = 90, PT (MH, >₹10k) = 200 (300 in Feb)
+    const pt = Number(addDays(today, 2).slice(5, 7)) === 2 ? 300 : 200;
+    assert.deepEqual([neha.statutory!.pf_employee, neha.statutory!.esi_employee, neha.statutory!.pt], [1440, 90, pt]);
+    assert.equal(neha.net, 12000 - 500 - 1440 - 90 - pt);
+    assert.equal(neha.employer_cost, 12000 + 1440 + Math.ceil(12000 * 0.0325));
+    assert.equal(ravi.statutory, null, "booth renters are not employees");
   });
 
   test("Performance coach reviews utilisation and ratings", async () => {

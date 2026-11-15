@@ -5,6 +5,7 @@ import { emit, processEvents, tick, runAgent } from "@/lib/agents/runtime";
 import { AGENTS } from "@/lib/agents/registry";
 import { createBooking, findOrCreateClient, logPastVisit, rescheduleBooking } from "@/lib/services/booking";
 import { issueInvoice } from "@/lib/services/invoicing";
+import { importClients } from "@/lib/services/clientsImport";
 import { receiveMessage } from "@/lib/agents/crm";
 import { computePayroll, screeningTurn } from "@/lib/agents/hr";
 import { generateLayout } from "@/lib/agents/platform";
@@ -58,6 +59,7 @@ export async function addStaff(fd: FormData) {
     skill_level: n(fd, "skill_level", 3), skills: list(s(fd, "skills")), employment_type: s(fd, "employment_type") || "employee",
     booth_rent_pct: n(fd, "booth_rent_pct"), base_salary: n(fd, "base_salary"), product_commission_pct: n(fd, "product_commission_pct", 5),
     hourly_cost: n(fd, "hourly_cost", 200), work_start: s(fd, "work_start") || "10:00", work_end: s(fd, "work_end") || "20:00",
+    gender: s(fd, "gender") || null, pf_enabled: fd.get("pf_enabled") === "on", esi_enabled: fd.get("esi_enabled") === "on",
     ...(slabs ? { commission_slabs: slabs } : {}),
   });
   if (error) fail("/app/staff", error.message);
@@ -345,7 +347,7 @@ export async function updateSalon(fd: FormData) {
   const [state_code, state] = s(fd, "state").split("|");
   const { error } = await db.from("tenants").update({
     name: s(fd, "name"), city: s(fd, "city"), state, state_code, gstin: s(fd, "gstin") || null, address: s(fd, "address"), phone: s(fd, "phone"),
-    description: s(fd, "description"), google_review_url: s(fd, "google_review_url") || null, open_time: s(fd, "open_time"), close_time: s(fd, "close_time"), is_published: fd.get("is_published") === "on",
+    description: s(fd, "description"), google_review_url: s(fd, "google_review_url") || null, upi_vpa: s(fd, "upi_vpa") || null, open_time: s(fd, "open_time"), close_time: s(fd, "close_time"), is_published: fd.get("is_published") === "on",
   }).eq("id", tenant.id);
   if (error) fail("/app/settings", error.message);
   done("/app/settings", "Salon profile saved.");
@@ -479,4 +481,27 @@ export async function walletTopup(fd: FormData) {
   await db.from("clients").update({ wallet_balance: Number(c?.wallet_balance ?? 0) + amt }).eq("id", clientId);
   await db.from("wallet_transactions").insert({ tenant_id: tenant.id, client_id: clientId, kind: "topup", amount: amt, note: `via ${s(fd, "payment_method") || "upi"}` });
   done("/app/loyalty", "Wallet topped up. (GST is charged when the balance is redeemed against a service.)");
+}
+
+// ───────────── Ported from open source: CSV import (pronto), human handoff (Kontor) ─────────────
+export async function importClientsCsv(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  const file = fd.get("file");
+  const text = file instanceof File && file.size ? await file.text() : s(fd, "csv");
+  if (!text) fail("/app/clients", "Choose a CSV file or paste CSV text");
+  if (text.length > 4_000_000) fail("/app/clients", "CSV too large (max ~4 MB) — split it");
+  try {
+    const r = await importClients(db, tenant.id, text, fd.get("consent") === "on");
+    done("/app/clients", `Imported ${r.imported} client(s); ${r.duplicates} already existed; ${r.skipped} row(s) skipped (no name / duplicate phone).`);
+  } catch (e) {
+    if ((e as { digest?: string }).digest?.startsWith("NEXT_REDIRECT")) throw e;
+    fail("/app/clients", (e as Error).message);
+  }
+}
+
+export async function setConversationStatus(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  const handle = s(fd, "handle"), status = s(fd, "status") === "human" ? "human" : "ai";
+  await db.from("conversations").upsert({ tenant_id: tenant.id, contact_handle: handle, status, reason: status === "human" ? "taken over by staff" : null, unclear_count: 0, updated_at: new Date().toISOString() });
+  done(`/app/inbox?h=${encodeURIComponent(handle)}`, status === "ai" ? "Handed back to the AI concierge." : "You are now handling this conversation; the AI will stay silent.");
 }

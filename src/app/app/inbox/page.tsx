@@ -1,7 +1,7 @@
 import { getTenantContext } from "@/lib/tenant";
 import { Badge, Card, Field, Flash, Input, PageHeader, Select, Textarea } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
-import { manualReply, simulateInbound } from "../actions";
+import { manualReply, setConversationStatus, simulateInbound } from "../actions";
 import { fmtDateTime } from "@/lib/time";
 
 const CH: Record<string, string> = { whatsapp: "🟢 WhatsApp", instagram: "📸 Instagram", google: "🔵 Google Business", call: "📞 Call transcript", sms: "✉️ SMS", web: "🌐 Web chat", email: "📧 Email" };
@@ -9,6 +9,8 @@ const CH: Record<string, string> = { whatsapp: "🟢 WhatsApp", instagram: "📸
 export default async function Inbox({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const sp = await searchParams;
   const { db, tenant } = await getTenantContext();
+  const { data: convos } = await db.from("conversations").select("contact_handle, status, reason").eq("tenant_id", tenant.id);
+  const human = new Map((convos ?? []).filter((c) => c.status === "human").map((c) => [c.contact_handle, c.reason]));
   const { data: msgs } = await db.from("messages").select("*, clients(name)").eq("tenant_id", tenant.id).order("created_at", { ascending: false }).limit(300);
   const threads = new Map<string, { handle: string; last: NonNullable<typeof msgs>[number]; count: number; name: string | null }>();
   (msgs ?? []).forEach((m) => {
@@ -30,7 +32,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Re
             {[...threads.values()].map((t) => (
               <li key={t.handle}>
                 <a href={`?h=${encodeURIComponent(t.handle)}`} className={`block rounded-lg px-2 py-1.5 text-sm ${t.handle === active ? "bg-brand-50" : "hover:bg-slate-50"}`}>
-                  <div className="flex justify-between"><b className="truncate">{t.name ?? t.handle}</b><span className="text-[10px] text-slate-400">{CH[t.last.channel]?.split(" ")[0]}</span></div>
+                  <div className="flex justify-between"><b className="truncate">{human.has(t.handle) && "👤 "}{t.name ?? t.handle}</b><span className="text-[10px] text-slate-400">{CH[t.last.channel]?.split(" ")[0]}</span></div>
                   <p className="truncate text-xs text-slate-500">{t.last.body}</p>
                 </a>
               </li>
@@ -38,7 +40,12 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Re
             {!threads.size && <p className="px-2 text-sm text-slate-400">No conversations yet — send a test message →</p>}
           </ul>
         </Card>
-        <Card title={active ? `Thread · ${active}` : "Thread"}>
+        <Card title={active ? `Thread · ${active}` : "Thread"} actions={active ? (
+          <form action={setConversationStatus} className="flex items-center gap-2 text-xs">
+            <input type="hidden" name="handle" value={active} /><input type="hidden" name="status" value={human.has(active) ? "ai" : "human"} />
+            {human.has(active) ? <Badge tone="red">👤 human handling · {human.get(active)}</Badge> : <Badge tone="violet">🤖 AI handling</Badge>}
+            <button className="text-brand-600 hover:underline">{human.has(active) ? "Hand back to AI" : "Take over"}</button>
+          </form>) : null}>
           <div className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto">
             {thread.map((m) => (
               <div key={m.id} className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${m.direction === "in" ? "self-start bg-slate-100" : "self-end bg-brand-50"}`}>

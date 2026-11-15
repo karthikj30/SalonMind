@@ -4,7 +4,7 @@ import type { TenantSettings } from "../domain/types";
 export type Tenant = {
   id: string; name: string; slug: string; city: string | null; state: string | null; state_code: string | null;
   gstin: string | null; address: string | null; phone: string | null; description: string | null;
-  is_published: boolean; google_review_url?: string | null; open_time: string; close_time: string; settings: TenantSettings; ui_layout: unknown;
+  is_published: boolean; google_review_url?: string | null; upi_vpa?: string | null; open_time: string; close_time: string; settings: TenantSettings; ui_layout: unknown;
 };
 
 export type Ctx = { db: SupabaseClient; tenant: Tenant; trigger: string };

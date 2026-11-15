@@ -4,7 +4,8 @@ import { SubmitButton } from "@/components/SubmitButton";
 import { addAdjustment, addStaff, addTimeOff, deleteTimeOff, runPayroll, toggleStaff } from "../actions";
 import { addDays, fmtDate, fmtDateTime, inr, todayIst } from "@/lib/time";
 
-type Line = { name: string; type: string; service_revenue: number; product_revenue: number; base: number; service_commission: number; product_commission: number; tips: number; penalties: number; bonus: number; booth_payout: number; net: number; breakdown: { range: string; amount: number }[] };
+type Stat = { pf_employee: number; esi_employee: number; pt: number; employer_contributions: number } | null;
+type Line = { statutory?: Stat; employer_cost?: number; gross?: number; name: string; type: string; service_revenue: number; product_revenue: number; base: number; service_commission: number; product_commission: number; tips: number; penalties: number; bonus: number; booth_payout: number; net: number; breakdown: { range: string; amount: number }[] };
 
 export default async function StaffPage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const sp = await searchParams;
@@ -50,6 +51,8 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
             <Field label="Cost ₹/hour"><Input name="hourly_cost" type="number" defaultValue={200} /></Field>
             <Field label="Product commission %"><Input name="product_commission_pct" type="number" defaultValue={5} /></Field>
             <Field label="Phone"><Input name="phone" /></Field>
+            <Field label="Gender (for PT slabs)"><Select name="gender" defaultValue=""><option value="">—</option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option></Select></Field>
+            <div className="flex items-end gap-3 text-xs"><label className="flex items-center gap-1"><input type="checkbox" name="pf_enabled" defaultChecked /> PF</label><label className="flex items-center gap-1"><input type="checkbox" name="esi_enabled" defaultChecked /> ESI</label></div>
             <Field label="Commission slabs (JSON)" className="col-span-2"><Textarea name="commission_slabs" defaultValue='[{"upto":50000,"pct":10},{"upto":150000,"pct":15},{"upto":null,"pct":20}]' /></Field>
             <div className="col-span-2"><SubmitButton>Add</SubmitButton></div>
           </form>
@@ -63,13 +66,15 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
           {latest ? (
             <>
               <p className="mb-2 text-xs text-slate-500">Latest run {fmtDate(latest.period_start)} → {fmtDate(latest.period_end)} · total <b>{inr(latest.total)}</b></p>
-              <Table head={["Staff", "Service rev", "Product rev", "Base", "Svc comm.", "Prod comm.", "Tips", "Penalty", "Net"]}>
+              <Table head={["Staff", "Service rev", "Product rev", "Base", "Svc comm.", "Prod comm.", "Tips", "Penalty", "PF / ESI / PT", "Net pay", "Employer cost"]}>
                 {(latest.lines as Line[]).map((l, i) => (
                   <tr key={i}>
                     <Td className="font-medium">{l.name}<div className="text-[11px] font-normal text-slate-500">{l.breakdown.map((b) => `${b.range}: ₹${b.amount}`).join(" · ")}</div></Td>
                     <Td>{inr(l.service_revenue)}</Td><Td>{inr(l.product_revenue)}</Td><Td>{inr(l.base)}</Td>
                     <Td>{l.type === "booth_renter" ? inr(l.booth_payout) : inr(l.service_commission)}</Td><Td>{inr(l.product_commission)}</Td>
-                    <Td>{inr(l.tips)}</Td><Td>{inr(l.penalties)}</Td><Td className="font-semibold">{inr(l.net)}</Td>
+                    <Td>{inr(l.tips)}</Td><Td>{inr(l.penalties)}</Td>
+                    <Td className="text-xs">{l.statutory ? `${inr(l.statutory.pf_employee)} / ${inr(l.statutory.esi_employee)} / ${inr(l.statutory.pt)}` : "—"}</Td>
+                    <Td className="font-semibold">{inr(l.net)}</Td><Td className="text-xs">{l.employer_cost !== undefined ? inr(l.employer_cost) : "—"}</Td>
                   </tr>
                 ))}
               </Table>
@@ -86,6 +91,10 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
               <div className="col-span-2"><SubmitButton>Record</SubmitButton></div>
             </form>
             <ul className="mt-3 space-y-1 text-xs text-slate-600">{(adj ?? []).map((a) => <li key={a.id}>{a.staff?.name}: {a.kind} {inr(a.amount)} {a.note && `· ${a.note}`}</li>)}</ul>
+          </Card>
+          <Card title="Stylist calendar feeds (Google / Apple / Outlook)">
+            <p className="mb-2 text-xs text-slate-500">Each stylist subscribes once (Google Calendar → Other calendars → From URL); bookings and leave sync automatically. Keep links private.</p>
+            <ul className="space-y-1 text-xs">{(staff ?? []).filter((s) => s.active).map((s) => <li key={s.id}><b>{s.name}</b>: <code className="break-all">{`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/ics/${s.calendar_token}.ics`}</code></li>)}</ul>
           </Card>
           <Card title="Leave & blocked time">
             <form action={addTimeOff} className="grid grid-cols-2 gap-2">

@@ -147,7 +147,15 @@ try {
   await f.locator("textarea[name=body]").fill("Hi, kal 11am men's haircut & beard book kar do please");
   await submit(f); await expectOk("inbox → concierge");
   const reply = await page.locator(".bg-brand-50 p.whitespace-pre-wrap").last().textContent();
-  log("concierge reply:", reply?.slice(0, 160));
+  log("concierge reply (proposal):", reply?.slice(0, 160));
+  if (!/YES/.test(reply ?? "")) throw new Error("concierge should ask for explicit YES before booking");
+  f = formWith("Test: incoming message");
+  await f.locator("input[name=handle]").fill("+919800000002");
+  await f.locator("textarea[name=body]").fill("yes");
+  await submit(f); await expectOk("customer confirms → booked");
+  const confirmed = await page.locator(".bg-brand-50 p.whitespace-pre-wrap").last().textContent();
+  if (!/Confirmed/.test(confirmed ?? "")) throw new Error("expected a booking confirmation, got: " + confirmed);
+  log("concierge confirmation:", confirmed?.slice(0, 120));
   await shot("inbox");
 
   // ── procurement & all agents

@@ -4,6 +4,7 @@ import { SubmitButton } from "@/components/SubmitButton";
 import { addToWaitlist, bookAction, bookWaitlistOffer, completeBooking, recordDeposit, rescheduleAction, setBookingStatus } from "../actions";
 import { planBooking } from "@/lib/services/booking";
 import { addDays, fmtDateTime, inr, istDate, todayIst, toIst } from "@/lib/time";
+import { upiLink } from "@/lib/domain/upi";
 
 export default async function Bookings({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const sp = await searchParams;
@@ -46,7 +47,7 @@ export default async function Bookings({ searchParams }: { searchParams: Promise
                 <Td><div>{b.staff?.name ?? "—"}</div><div className="text-xs text-slate-500">{b.rooms?.name}</div>{b.schedule_reasoning && <div className="max-w-xs text-[11px] text-slate-400" title={b.schedule_reasoning}>{b.schedule_reasoning.slice(0, 80)}…</div>}</Td>
                 <Td><div>{inr(b.price)}</div>{b.pricing_note && <div className="text-[11px] text-slate-500">{b.pricing_note}</div>}</Td>
                 <Td>{b.no_show_risk === null ? "…" : <Badge tone={b.no_show_risk >= tenant.settings.deposit_threshold ? "red" : b.no_show_risk >= tenant.settings.nudge_threshold ? "amber" : "green"}>{Math.round(b.no_show_risk * 100)}%</Badge>}
-                  {Number(b.deposit_required) > 0 && <div className="text-[11px] text-red-600">deposit {inr(b.deposit_required)}{Number(b.deposit_paid) > 0 && " ✔ paid"}</div>}</Td>
+                  {Number(b.deposit_required) > 0 && <div className="text-[11px] text-red-600">deposit {inr(b.deposit_required)}{Number(b.deposit_paid) > 0 ? " ✔ paid" : tenant.upi_vpa ? <> · <a className="underline" href={(() => { try { return upiLink({ vpa: tenant.upi_vpa!, name: tenant.name, amount: Number(b.deposit_required), note: "Deposit", ref: b.id.slice(0, 12) }); } catch { return "#"; } })()}>UPI link</a></> : null}</div>}</Td>
                 <Td><Badge tone={statusTone(b.status)}>{b.status}</Badge>{b.rating && <div className="text-xs">{"★".repeat(b.rating)}</div>}</Td>
                 <Td>
                   {["booked", "confirmed"].includes(b.status) ? (

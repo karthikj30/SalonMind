@@ -9,6 +9,8 @@ import { LANGUAGES } from "@/lib/ai/llm";
 import { marketplaceBook } from "./actions";
 import { ChatWidget } from "./ChatWidget";
 import { SubmitButton } from "@/components/SubmitButton";
+import { upiLink } from "@/lib/domain/upi";
+import { qrSvg } from "@/lib/services/qr";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +31,11 @@ export default async function SalonPage({ params, searchParams }: { params: Prom
   const slots = (plan?.slots ?? []).sort((a, b) => a.start.getTime() - b.start.getTime());
   type Booked = { start_at: string; price: number; deposit_required: number; services: { name: string } | null; staff: { name: string } | null };
   let booked: Booked | null = null;
+  let payQr: { link: string; svg: string } | null = null;
   if (sp.booked) booked = (await db.from("bookings").select("start_at, price, deposit_required, no_show_risk, services(name), staff(name)").eq("id", sp.booked).eq("tenant_id", tenant.id).single()).data as unknown as Booked;
+  if (booked && Number(booked.deposit_required) > 0 && tenant.upi_vpa) {
+    try { const link = upiLink({ vpa: tenant.upi_vpa, name: tenant.name, amount: Number(booked.deposit_required), note: `Deposit ${booked.services?.name ?? ""}`.trim(), ref: String(sp.booked).slice(0, 12) }); payQr = { link, svg: await qrSvg(link) }; } catch { /* bad VPA */ }
+  }
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
       <Link href="/marketplace" className="text-sm text-brand-700">← Marketplace</Link>
@@ -41,6 +47,12 @@ export default async function SalonPage({ params, searchParams }: { params: Prom
         <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm">
           <p className="font-semibold text-emerald-800">✅ Booked: {booked.services?.name} with {booked.staff?.name} on {fmtDateTime(booked.start_at)} — {inr(booked.price)} + GST</p>
           {Number(booked.deposit_required) > 0 ? <p className="mt-1 text-amber-800">To hold this slot, please pay a deposit of {inr(booked.deposit_required)} via UPI (the salon has sent details on WhatsApp).</p> : <p className="mt-1 text-emerald-700">A confirmation will be sent to you on WhatsApp.</p>}
+          {payQr && (
+            <div className="mt-3 flex flex-wrap items-center gap-4">
+              <div className="h-[180px] w-[180px] rounded bg-white" dangerouslySetInnerHTML={{ __html: payQr.svg }} />
+              <div className="text-xs text-slate-600"><p>Scan with any UPI app, or on your phone:</p><a href={payQr.link} className="mt-1 inline-block rounded-lg bg-brand-600 px-3 py-1.5 font-medium text-white">Pay {inr(booked.deposit_required)} via UPI</a></div>
+            </div>
+          )}
         </div>
       )}
       {(deals ?? []).length > 0 && (

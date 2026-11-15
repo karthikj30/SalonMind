@@ -37,6 +37,26 @@ Found via GitHub search (`salon management`, `appointment booking open source`):
 | KarmaComputing/salon-booking-guru (Go) | online client booking | — |
 | calcom/cal.diy (50k★) | scheduling infrastructure | design reference for buffer/limits (future) |
 
+### Second sweep — repos whose ideas are now implemented
+
+| Repo | Stars | What we ported | Where |
+|---|---|---|---|
+| [reinh2/Kontor](https://github.com/reinh2/Kontor) — self-hosted AI front desk | — | **Two-phase AI booking** (model proposes frozen args, customer must say YES), **human handoff** on complaints / repeated confusion, **DB-enforced no double-booking** (exclusion constraint) | `crm.ts` concierge, `booking_proposals`, `conversations`, migration 0006 |
+| [Centre-for-Information-Technology-India/upi-pg](https://github.com/Centre-for-Information-Technology-India/upi-pg) | 49 | NPCI `upi://pay` deposit/bill links + QR (rendered server-side, zero fees, no gateway) | `domain/upi.ts`, No-Show agent, public booking page |
+| [frappe/india-payroll](https://github.com/frappe/india-payroll) | 28 | **PF** (12%, ₹15k ceiling, EPS/EPF split), **ESI** (0.75%/3.25% ≤ ₹21k), **state professional tax** (MH incl. women exemption & Feb, KA, WB, GJ, TS/AP) | `domain/statutory.ts`, payroll |
+| [SGrappelli/pronto](https://github.com/SGrappelli/pronto) — Next.js + Supabase salon CRM/POS | 75 | **CSV client import** from Fresha/Vagaro/Booksy/Square exports (alias mapping, +91 normalisation, DD/MM dates, dedupe) | `domain/csv.ts`, Clients page |
+| [alextselegidis/easyappointments](https://github.com/alextselegidis/easyappointments) | 4.5k | Calendar sync → **per-stylist ICS feed** (Google/Apple/Outlook subscribe) incl. leave | `/api/ics/[token]` |
+| [JunaydEco-coder/hairstyle-recommendation-system](https://github.com/JunaydEco-coder/hairstyle-recommendation-system) & similar | 61 | **Face-shape style advisor** — done with a free vision LLM instead of a custom CV model | marketplace "Style advisor" |
+
+### Also reviewed (good references, not ported)
+
+* [opensourcepos/opensourcepos](https://github.com/opensourcepos/opensourcepos) (4.5k★) — barcode/receipt POS; our POS is service-centric.
+* [IamRamgarhia/Free-GST-Billing-Software](https://github.com/IamRamgarhia/Free-GST-Billing-Software) (509★) — quotations/credit notes; credit notes are a candidate next step.
+* [openai/openai-agents-js](https://github.com/openai/openai-agents-js) (4k★) — agent framework; our event-bus mesh needs no paid SDK and runs on free models.
+* [kirklandsig/AIReceptionist](https://github.com/kirklandsig/AIReceptionist), [7XLabs/Aiva](https://github.com/7XLabs/Aiva) — voice receptionists; need paid realtime/telephony, so voice stays on the roadmap.
+* [amicalhq/refref](https://github.com/amicalhq/refref) — referral platform; our Loyalty & Referral agent covers salon needs.
+* [UMCU-Digital-Health/No_Show](https://github.com/UMCU-Digital-Health/No_Show) — trained no-show model; our explainable logistic model can be re-fit once a salon has history.
+
 None of the open-source projects are AI-native or multi-tenant, none handle Indian GST, and none have an
 agent mesh — those remain SalonMind's differentiators.
 

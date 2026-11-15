@@ -3,6 +3,7 @@ export type Staff = {
   employment_type: "employee" | "booth_renter"; booth_rent_pct: number; base_salary: number;
   commission_slabs: { upto: number | null; pct: number }[]; product_commission_pct: number;
   hourly_cost: number; work_start: string; work_end: string; active: boolean; phone?: string | null;
+  gender?: string | null; pf_enabled?: boolean; esi_enabled?: boolean;
 };
 export type Room = { id: string; name: string; type: string; equipment: string[] };
 export type Service = {

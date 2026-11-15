@@ -154,3 +154,38 @@ test("Scheduler: plain services don't tie up specialist rooms", () => {
   const slots = findSlots({ service: { ...svc, min_skill_level: 1, required_equipment: [] }, date: "2030-01-08", staff: [staffB], rooms, bookings: [], openTime: "10:00", closeTime: "20:00", now: new Date("2029-01-01") });
   assert.ok(slots.length && slots.every((s) => s.room?.id === "chair"));
 });
+
+import { upiLink } from "../src/lib/domain/upi.ts";
+import { statutory, professionalTax } from "../src/lib/domain/statutory.ts";
+import { parseCsv, mapClientRows } from "../src/lib/domain/csv.ts";
+import { buildIcs } from "../src/lib/domain/ics.ts";
+
+test("UPI deep link follows NPCI format and rejects bad VPAs", () => {
+  const l = upiLink({ vpa: "glowstudio@okhdfcbank", name: "Glow Studio", amount: 725, note: "Deposit Balayage" });
+  assert.equal(l, "upi://pay?pa=glowstudio%40okhdfcbank&pn=Glow%20Studio&am=725.00&cu=INR&tn=Deposit%20Balayage");
+  assert.throws(() => upiLink({ vpa: "not-a-vpa", name: "x", amount: 1 }));
+});
+
+test("Statutory payroll: PF ceiling, ESI threshold, state professional tax", () => {
+  const low = statutory({ basic: 12000, gross: 18000, stateCode: "27", month: 11, pf: true, esi: true });
+  assert.equal(low.pf_employee, 1440); assert.equal(low.esi_employee, 135); assert.equal(low.esi_employer, 585); assert.equal(low.pt, 200);
+  assert.equal(low.eps + low.epf_employer, 1440);
+  const high = statutory({ basic: 30000, gross: 45000, stateCode: "29", month: 2, pf: true, esi: true });
+  assert.equal(high.pf_employee, 1800, "PF capped at ₹15,000 wage"); assert.equal(high.esi_employee, 0, "above ESI ceiling"); assert.equal(high.pt, 300, "Karnataka Feb");
+  assert.equal(professionalTax("27", 20000, 5, "female"), 0, "MH women exemption up to ₹25,000");
+  assert.equal(professionalTax("07", 90000, 5), 0, "Delhi has no PT");
+  assert.equal(statutory({ basic: 12000, gross: 18000, stateCode: "07", month: 1, pf: false, esi: false }).employee_deductions, 0);
+});
+
+test("CSV import maps Fresha/Booksy-style exports, normalises Indian phones & DD/MM dates, dedupes", () => {
+  const csv = 'First Name,Last Name,Mobile Number,Email,Date of Birth,Notes\r\nAsha,Rao,98765 43210,asha@x.in,15/08/1994,"likes ""soft"" curls, no ammonia"\nDup,Person,09876543210,,,\n,,,,,\nRavi,,+91 91234 56789,,1990-1-5,\n';
+  const r = mapClientRows(parseCsv(csv));
+  assert.equal(r.clients.length, 2); assert.equal(r.skipped, 1);
+  assert.deepEqual(r.clients[0], { name: "Asha Rao", phone: "+919876543210", email: "asha@x.in", birthday: "1994-08-15", notes: 'likes "soft" curls, no ammonia' });
+  assert.equal(r.clients[1].birthday, "1990-01-05");
+});
+
+test("ICS feed is RFC 5545 shaped", () => {
+  const ics = buildIcs("Asha · Glow", [{ uid: "b1", start: "2026-11-16T05:30:00Z", end: "2026-11-16T07:30:00Z", summary: "Balayage — Priya; VIP", location: "Colour bay" }]);
+  assert.match(ics, /^BEGIN:VCALENDAR\r\n/); assert.match(ics, /DTSTART:20261116T053000Z/); assert.match(ics, /SUMMARY:Balayage — Priya\; VIP/); assert.match(ics, /END:VCALENDAR\r\n$/);
+});

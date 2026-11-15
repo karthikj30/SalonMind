@@ -1,7 +1,7 @@
 import { getTenantContext } from "@/lib/tenant";
 import { Badge, Card, Field, Flash, Input, PageHeader, Select, Table, Td, Textarea } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
-import { addClient, eraseClient, logPastVisitAction } from "../actions";
+import { addClient, eraseClient, importClientsCsv, logPastVisitAction } from "../actions";
 import { LANGUAGES } from "@/lib/ai/llm";
 import { addDays, fmtDate, inr, todayIst } from "@/lib/time";
 
@@ -55,6 +55,15 @@ export default async function Clients({ searchParams }: { searchParams: Promise<
             <SubmitButton>Add client</SubmitButton>
           </form>
           <p className="mt-3 text-xs text-slate-400">DPDP Act: “Export” downloads all data held about a client; “Erase” anonymises personal data while retaining de-identified tax records.</p>
+        </Card>
+        <Card title="Import clients from CSV (Fresha, Vagaro, Booksy, Square, Excel)" className="lg:col-span-3">
+          <form action={importClientsCsv} className="flex flex-wrap items-end gap-3">
+            <Field label="CSV file"><input type="file" name="file" accept=".csv,text/csv" className="text-sm" /></Field>
+            <Field label="…or paste CSV" className="min-w-[280px] flex-1"><Textarea name="csv" rows={2} placeholder={"Name,Mobile,Email,Date of Birth\nAsha Rao,9876543210,asha@x.in,15/08/1994"} /></Field>
+            <label className="flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" name="consent" /> These clients consented to marketing</label>
+            <SubmitButton>Import</SubmitButton>
+          </form>
+          <p className="mt-2 text-xs text-slate-400">Recognises columns like Name / First Name + Last Name, Mobile / Phone, Email, Birthday / Date of Birth (DD/MM/YYYY), Notes. 10-digit numbers get +91. Existing phones are skipped.</p>
         </Card>
         <Card title="Import past visit (visit history)" className="lg:col-span-3">
           <p className="mb-2 text-xs text-slate-500">Migrating from a register or another app? Record past visits so agents learn each client&apos;s cycle immediately (e.g. haircuts 12, 8 and 4 weeks ago → the Campaign Agent sends a week-5 offer). Imported visits create no invoice and move no stock.</p>

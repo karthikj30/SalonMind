@@ -3,9 +3,9 @@
 Every requirement in `docs/Salon_Management_System_RFP.pdf`, where it lives in the code, and the test
 that proves it. Three test layers:
 
-* **Unit** — `npm test` → `tests/domain.test.ts` (19 tests, pure business rules)
+* **Unit** — `npm test` → `tests/domain.test.ts` (24 tests, pure business rules)
 * **Integration (real Postgres, no mocks)** — `npm run test:integration` → `tests/integration/rfp.test.mts`
-  (27 tests; creates a throw-away salon through the same service functions the UI uses, runs the real
+  (32 tests; creates a throw-away salon through the same service functions the UI uses, runs the real
   agents, asserts on rows they wrote, deletes everything)
 * **E2E (real browser, real UI)** — `BASE_URL=… node tests/e2e.mjs` (signup → … → account deletion)
 
@@ -90,6 +90,19 @@ that proves it. Three test layers:
 | Birthday campaigns | `retention` agent | UNIT *Birthday countdown*; INT *Birthday campaign* |
 | Rescheduling | `rescheduleBooking` | INT *Reschedule…* |
 | Visit-history import | `logPastVisit` | INT *Autonomous campaign…* (rejects future dates) |
+
+## Ported from open-source projects (second sweep)
+
+| Feature | Source idea | Tests |
+|---|---|---|
+| No double-booking guaranteed by Postgres exclusion constraints | Kontor | INT *Postgres exclusion constraint makes double-booking impossible…* |
+| Two-phase AI booking (propose → customer YES) | Kontor | INT *Unified inbox… (proposal, then "haan, confirm")*; E2E concierge proposal + confirmation |
+| Human handoff (complaints, repeated confusion) | Kontor | INT *Complaint escalates to a human…*, *Two unclear messages…* |
+| UPI deposit links + QR | upi-pg | UNIT *UPI deep link…*; INT *No-show mitigation… carries an NPCI UPI link* |
+| PF / ESI / professional tax | frappe/india-payroll | UNIT *Statutory payroll…*; INT *Payroll…* |
+| CSV client import | pronto | UNIT *CSV import…*; INT *CSV client import…* |
+| Stylist ICS calendar feed | easyappointments | UNIT *ICS feed…*; INT *Stylist ICS feed* (HTTP, with BASE_URL) |
+| Face-shape style advisor | hairstyle-recommendation repos | manual (needs a free vision key) |
 
 ## Known limits (honest)
 

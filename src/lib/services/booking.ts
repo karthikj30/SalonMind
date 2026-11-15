@@ -75,7 +75,7 @@ export async function createBooking(db: SupabaseClient, tenant: Tenant, p: {
     base_price: plan.service.base_price, price: best.quote.price, pricing_note: best.quote.note, source: p.source,
     schedule_reasoning: `${best.staff.name}: ${best.reasons.join(" · ")}`,
   }).select("*").single();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(friendlyDbError(error.message));
   await emit(db, tenant.id, "booking.created", { booking_id: data.id }, "scheduler");
   return { booking: data, slot: best, service: plan.service };
 }
@@ -93,7 +93,7 @@ export async function rescheduleBooking(db: SupabaseClient, tenant: Tenant, book
     price: best.quote.price, pricing_note: best.quote.note, rescheduled_from: b.start_at, no_show_risk: null,
     schedule_reasoning: `Rescheduled → ${best.staff.name}: ${best.reasons.join(" · ")}`,
   }).eq("id", b.id).select("*").single();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(friendlyDbError(error.message));
   await emit(db, tenant.id, "booking.cancelled", { booking_id: b.id, freed_start: b.start_at, freed_end: b.end_at, service_id: b.service_id, reason: "rescheduled" }, "scheduler");
   await emit(db, tenant.id, "booking.created", { booking_id: b.id }, "scheduler");
   return { booking: data, slot: best };
@@ -120,4 +120,9 @@ export async function logPastVisit(db: SupabaseClient, tenant: Tenant, p: {
   if (p.review || p.rating) await emit(db, tenant.id, "booking.reviewed", { booking_id: data.id }, "import");
   else await emit(db, tenant.id, "booking.completed.historical", { booking_id: data.id }, "import");
   return data.id as string;
+}
+
+/** Postgres exclusion constraints (bookings_no_staff_overlap / _room_overlap) guarantee no double booking under concurrency. */
+export function friendlyDbError(msg: string) {
+  return /no_(staff|room)_overlap|exclusion constraint/i.test(msg) ? "That slot was just taken by another booking — please pick another time." : msg;
 }

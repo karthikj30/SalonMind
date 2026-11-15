@@ -171,7 +171,7 @@ export const conciergeAgent: AgentDef = {
   id: "concierge",
   name: "AI Concierge",
   module: "CRM & Marketing",
-  description: "Unified inbox rep: replies to WhatsApp/Instagram/Google/call/web messages in the customer's language and books appointments via the scheduler.",
+  description: "Unified inbox rep: replies to WhatsApp/Instagram/Google/call/web messages in the customer's language, proposes bookings that execute only after the customer replies YES, and hands complaints or confused chats to a human.",
   subscribes: ["message.received"],
   periodic: false,
   async run({ db, tenant }, ev) {
@@ -183,8 +183,42 @@ export const conciergeAgent: AgentDef = {
     let client = msg.client_id ? (await db.from("clients").select("*").eq("id", msg.client_id).single()).data : null;
     if (!client && /^\+?\d{10,13}$/.test(handle.replace(/\s/g, ""))) client = (await db.from("clients").select("*").eq("tenant_id", tenant.id).eq("phone", handle.replace(/\s/g, "")).maybeSingle()).data;
 
+    // Human handoff: once escalated, the AI stays silent until staff hand the thread back.
+    const { data: convo } = await db.from("conversations").select("*").eq("tenant_id", tenant.id).eq("contact_handle", handle).maybeSingle();
+    if (convo?.status === "human") {
+      return { summary: `[${msg.channel}] ${handle}: human is handling this conversation (${convo.reason ?? "escalated"}) — AI did not reply.`, actions: [{ type: "handoff", label: `Awaiting staff reply to ${handle}` }] };
+    }
+    const isYes = /^\s*(yes|y|haan|ha|han|ok|okay|confirm|confirmed|1|ஆம்|అవును|হ্যাঁ|हाँ|हां)\b/i.test(msg.body);
+    const isNo = /^\s*(no|n|nahi|nahin|cancel it|2|नहीं)\b/i.test(msg.body);
+
+    // Two-phase booking (Kontor pattern): a pending proposal holds frozen arguments; only an explicit YES executes it.
+    if (isYes || isNo) {
+      const { data: prop } = await db.from("booking_proposals").select("*, services(name)").eq("tenant_id", tenant.id).eq("contact_handle", handle)
+        .eq("status", "pending").gt("expires_at", new Date().toISOString()).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (prop && isNo) {
+        await db.from("booking_proposals").update({ status: "superseded" }).eq("id", prop.id);
+        await sendMessage(db, { tenant_id: tenant.id, client_id: prop.client_id, contact_handle: handle, phone: client?.phone, channel: msg.channel, body: "No problem — I haven't booked anything. Tell me another day or time that suits you.", agent: "concierge", meta: { intent: "proposal_declined" } });
+        return { summary: `[${msg.channel}] proposal declined by customer — nothing booked.` };
+      }
+      if (prop && isYes) {
+        try {
+          const r = await createBooking(db, tenant, { client_id: prop.client_id, service_id: prop.service_id, date: prop.date, time: prop.time.slice(0, 5), source: msg.channel });
+          await db.from("booking_proposals").update({ status: "confirmed", booking_id: r.booking.id }).eq("id", prop.id);
+          const body = `✅ Confirmed: ${r.service.name} on ${fmtDateTime(r.booking.start_at)} with ${r.slot.staff.name}, ${inr(r.booking.price)} + GST. See you soon!`;
+          await sendMessage(db, { tenant_id: tenant.id, client_id: prop.client_id, contact_handle: handle, phone: client?.phone, channel: msg.channel, body, agent: "concierge", meta: { intent: "proposal_confirmed" } });
+          return { summary: `[${msg.channel}] customer confirmed proposal → booked ${r.service.name} ${fmtDateTime(r.booking.start_at)}.`, actions: [{ type: "booking", label: `Booked ${r.service.name} at ${fmtDateTime(r.booking.start_at)} (customer confirmed)`, ref: r.booking.id }] };
+        } catch (e) {
+          await db.from("booking_proposals").update({ status: "failed" }).eq("id", prop.id);
+          const plan = await planBooking(db, tenant, { service_id: prop.service_id, date: prop.date }, 3).catch(() => null);
+          const alt = plan?.slots.length ? ` Free now: ${plan.slots.map((x) => toIst(x.start).time).join(", ")}.` : "";
+          await sendMessage(db, { tenant_id: tenant.id, client_id: prop.client_id, contact_handle: handle, phone: client?.phone, channel: msg.channel, body: `Sorry, that slot was just taken by someone else.${alt} Which time would you like?`, agent: "concierge" });
+          return { summary: `Proposal could not be executed: ${(e as Error).message}` };
+        }
+      }
+    }
+
     // Closing the waitlist loop: "YES" to an offered slot books it directly.
-    if (client && /^\s*(yes|y|haan|ha|han|ok|okay|confirm|1|ஆம்|అవును|হ্যাঁ|हाँ|हां)\b/i.test(msg.body)) {
+    if (client && isYes) {
       const { data: offer } = await db.from("waitlist").select("id, service_id, offered_slot").eq("client_id", client.id).eq("status", "offered").order("created_at").limit(1).maybeSingle();
       if (offer?.offered_slot) {
         const t = toIst(new Date(offer.offered_slot));
@@ -221,16 +255,17 @@ Return JSON {language: ISO code of the customer's language (en, hi, ta, te, bn, 
     if ((it.intent === "book" || it.intent === "availability") && svc) {
       const date = it.date ?? today;
       if (it.intent === "book" && it.time) {
-        try {
+        const exact = await planBooking(db, tenant, { service_id: svc.id, date, from: it.time, to: it.time }, 1).catch(() => null);
+        const slot = exact?.slots[0];
+        if (slot) {
           if (!client) client = await findOrCreateClient(db, tenant.id, { name: it.name ?? (msg.meta?.name as string) ?? "Guest", phone: /^\+?\d{10,13}$/.test(handle) ? handle : null, language: it.language });
-          const r = await createBooking(db, tenant, { client_id: client!.id, service_id: svc.id, date, time: it.time, source: msg.channel });
-          facts.push(`BOOKED: ${svc.name} on ${fmtDateTime(r.booking.start_at)} with ${r.slot.staff.name}, price ${inr(r.booking.price)} (${r.booking.pricing_note}).`);
-          actions.push({ type: "booking", label: `Booked ${svc.name} for ${client!.name} at ${fmtDateTime(r.booking.start_at)}`, ref: r.booking.id });
-        } catch (e) {
-          facts.push(`Could not book ${it.time}: ${(e as Error).message}.`);
-        }
+          await db.from("booking_proposals").update({ status: "superseded" }).eq("tenant_id", tenant.id).eq("contact_handle", handle).eq("status", "pending");
+          const { data: prop } = await db.from("booking_proposals").insert({ tenant_id: tenant.id, client_id: client!.id, contact_handle: handle, service_id: svc.id, date, time: it.time, quoted_price: slot.quote.price }).select("id").single();
+          facts.push(`PROPOSAL (not yet booked): ${svc.name} on ${fmtDateTime(slot.start)} with ${slot.staff.name}, price ${inr(slot.quote.price)} + GST. Ask the customer to reply YES to confirm or NO to change.`);
+          actions.push({ type: "proposal", label: `Proposed ${svc.name} ${fmtDateTime(slot.start)} to ${client!.name} — awaiting YES`, ref: prop?.id });
+        } else facts.push(`${it.time} on ${date} is not available for ${svc.name}.`);
       }
-      if (!facts.some((f) => f.startsWith("BOOKED"))) {
+      if (!facts.some((f) => f.startsWith("PROPOSAL"))) {
         const plan = await planBooking(db, tenant, { service_id: svc.id, date }, 4).catch(() => null);
         facts.push(plan?.slots.length ? `Open slots for ${svc.name} on ${date}: ${plan.slots.map((s) => `${toIst(s.start).time} with ${s.staff.name} ${inr(s.quote.price)}`).join(", ")}.` : `No open slots for ${svc.name} on ${date}.`);
       }
@@ -245,13 +280,20 @@ Return JSON {language: ISO code of the customer's language (en, hi, ta, te, bn, 
         actions.push({ type: "cancel", label: `Cancelled booking for ${client.name}`, ref: next.id });
       } else facts.push("No upcoming booking found to cancel.");
     }
-    if (it.intent === "complaint") facts.push("Escalate: apologise, say the manager will call back within 2 hours.");
+    const understood = !!svc || ["book", "availability", "price", "cancel", "reschedule", "greeting"].includes(it.intent);
+    const unclear = understood ? 0 : (convo?.unclear_count ?? 0) + 1;
+    const escalate = it.intent === "complaint" ? "complaint" : unclear >= 2 ? "AI could not understand twice" : null;
+    await db.from("conversations").upsert({ tenant_id: tenant.id, contact_handle: handle, status: escalate ? "human" : "ai", reason: escalate, unclear_count: escalate ? 0 : unclear, updated_at: new Date().toISOString() });
+    if (escalate) {
+      facts.push("HANDOFF: apologise if needed and say a team member will take over this chat and the manager will call back within 2 hours.");
+      actions.push({ type: "escalation", label: `⚠ Escalated ${handle} to staff (${escalate})` });
+    }
 
     const reply = await llmText({
       system: `You are the friendly AI receptionist of ${tenant.name} (${tenant.city ?? ""}), hours ${tenant.open_time.slice(0, 5)}–${tenant.close_time.slice(0, 5)}. Reply on ${msg.channel} in ${lang(it.language)} (use the customer's script). Max 70 words. Use ONLY these facts; never invent prices or slots. Services: ${catalogue}. Facts: ${facts.join(" ") || "none"}. If booking details are missing, ask for the missing service/date/time.`,
       messages: [{ role: "user", content: history || msg.body }],
       temperature: 0.5,
-    }, () => facts.length ? facts.map((f) => f.replace(/^(BOOKED|CANCELLED): /, "✅ ")).join("\n") + (facts.some((f) => f.startsWith("Open slots")) ? "\nReply with a time to book." : "")
+    }, () => facts.length ? facts.map((f) => f.replace(/^CANCELLED: /, "✅ Cancelled: ").replace(/^PROPOSAL \(not yet booked\): (.*?) Ask the customer.*$/, "I can book $1\nReply YES to confirm or NO to change.").replace(/^HANDOFF: .*$/, "I'm sorry about this. A team member is taking over this chat and our manager will call you back within 2 hours.")).join("\n") + (facts.some((f) => f.startsWith("Open slots")) ? "\nReply with a time to book." : "")
       : `Namaste! Thanks for messaging ${tenant.name}. ${catalogue ? "We offer: " + catalogue.split("; ").slice(0, 5).join(", ") + "." : ""} Tell me the service, date and time you'd like and I'll book it for you.`);
 
     await sendMessage(db, { tenant_id: tenant.id, client_id: client?.id ?? null, contact_handle: handle, phone: client?.phone, channel: msg.channel, body: reply.text, agent: "concierge", meta: { intent: it.intent, language: it.language } });

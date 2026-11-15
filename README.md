@@ -29,6 +29,10 @@ Works with **no AI key at all** (rules-engine mode); add a free key to unlock mu
 | Billing, POS & GST | Billing & POS, GST Compliance |
 | Platform | Self-Optimizer (+ AI Studio generative dashboards) |
 
+Also built in (ideas ported from open-source projects — see `docs/RESEARCH.md`): two-phase AI booking with
+human handoff, Postgres-enforced no double-booking, UPI deposit links + QR, PF/ESI/professional-tax payroll,
+CSV client import, stylist calendar (ICS) feeds and a face-shape style advisor.
+
 Agents communicate through an event bus (`agent_events`) and log every run (`agent_runs`) — watch them
 in the **Agent Console**.
 
@@ -56,8 +60,8 @@ After adding `GEMINI_API_KEY`, click **Settings → Re-index services** to switc
 ## Tests
 
 ```bash
-npm run typecheck && npm test && npm run build      # 19 domain unit tests (GST, payroll, scheduler, pricing, loyalty…)
-npm run test:integration                            # 27 tests against the real Supabase DB — every RFP bullet + tenant isolation
+npm run typecheck && npm test && npm run build      # 24 domain unit tests (GST, payroll, scheduler, pricing, loyalty…)
+npm run test:integration                            # 32 tests against the real Supabase DB — every RFP bullet + tenant isolation
 BASE_URL=http://localhost:3000 node tests/e2e.mjs   # browser E2E through the real UI (cleans up via account deletion)
 ```
 

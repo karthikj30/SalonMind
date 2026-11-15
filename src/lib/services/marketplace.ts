@@ -1,7 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { embed, toPgVector } from "../ai/embeddings";
-import { llm, llmJson } from "../ai/llm";
+import { extractJson, llm, llmJson } from "../ai/llm";
 import { parseIntent, type SearchIntent } from "../domain/intent";
 import { planBooking } from "./booking";
 import { normalizeTenant } from "../agents/runtime";
@@ -19,11 +19,23 @@ export type SearchResult = {
  * Consumer discovery engine: natural-language (any Indian language) or photo → structured intent →
  * hybrid retrieval (pgvector similarity + lexical) → hard filters (budget, city) → live slot availability.
  */
-export async function searchMarketplace(db: SupabaseClient, q: string, image?: { mime: string; base64: string }) {
+export type StyleAdvice = { face_shape: string; styles: { name: string; why: string }[]; query: string };
+
+export async function searchMarketplace(db: SupabaseClient, q: string, image?: { mime: string; base64: string }, mode: "match" | "advisor" = "match") {
   let query = q.trim();
   let visual: string | null = null;
+  let advice: StyleAdvice | null = null;
   const trace: string[] = [];
-  if (image) {
+  if (image && mode === "advisor") {
+    // Style advisor (idea from open-source face-shape hairstyle recommenders, done with a free vision LLM instead of a custom CV model)
+    const r = await llm({
+      system: `You are a senior stylist. From the selfie, estimate the face shape (oval, round, square, heart, diamond, oblong) and recommend 3 haircuts/colours that flatter it and suit Indian hair textures. Return JSON {"face_shape":"…","styles":[{"name":"…","why":"≤15 words"}],"query":"salon service keywords to search, ≤8 words"}. Do not comment on attractiveness, age, ethnicity or anything other than face shape and hair.`,
+      messages: [{ role: "user", content: q || "Which hairstyles would suit me?" }], image, json: true, temperature: 0.3,
+    });
+    const j = r ? extractJson<StyleAdvice>(r.text) : null;
+    if (j?.styles?.length) { advice = j; query = `${q} ${j.query || j.styles.map((x) => x.name).join(" ")}`.trim(); trace.push(`style advisor (${r!.provider}): ${j.face_shape} face → ${j.styles.map((x) => x.name).join(", ")}`); }
+    else trace.push("style advisor: needs a vision-capable free model (GROQ_API_KEY or GEMINI_API_KEY)");
+  } else if (image) {
     const r = await llm({
       system: "You are a hairstyle/beauty expert. Describe the look in the photo as a salon service search query (≤20 words): service names (e.g. balayage, layered cut, keratin, bridal makeup, nail art), colour, length, style. Output only the query.",
       messages: [{ role: "user", content: "What salon service would create this look?" }], image,
@@ -86,7 +98,7 @@ export async function searchMarketplace(db: SupabaseClient, q: string, image?: {
   }
   if (date) results.sort((a, b) => b.score - a.score);
   trace.push(date ? `availability checked for ${date}${intent.fromTime ? ` ${intent.fromTime}–${intent.toTime}` : ""}` : "no date in query → availability not filtered");
-  return { intent, results, trace, visual, date };
+  return { intent, results, trace, visual, date, advice };
 }
 
 /** Simple per-IP rate limiter for public AI endpoints (best effort, per serverless instance). */

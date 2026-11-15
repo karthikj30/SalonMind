@@ -91,6 +91,10 @@ emit / runAgent / processEvents(claim pending→processing) / tick)
     staff leave respected by the scheduler, rescheduling, visit-history import, reputation agent
     (Google review request for 4–5★, service recovery for ≤3★, next-visit suggestion), birthday offers,
     owner self-service account deletion (DPDP).
+ Ported from OSS (see docs/RESEARCH.md): Kontor-style two-phase AI booking (booking_proposals; execute only
+    on explicit YES) + human handoff (conversations.status) + Postgres exclusion constraints against double
+    booking; upi-pg NPCI upi://pay links + server-side QR; frappe/india-payroll PF/ESI/professional tax;
+    pronto CSV client import; easyappointments-style per-stylist ICS feed; face-shape style advisor via vision LLM.
  Platform: optimizer (bounded self-tuning of thresholds/caps from no-show rate & occupancy, logged),
     AI Studio (NL prompt → validated widget-schema dashboard = generative micro-frontend; LLM may only
     pick from a typed registry — never generate executable code).

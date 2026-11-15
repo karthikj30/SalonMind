@@ -134,6 +134,11 @@ payout + consumes recipe stock → emits `stock.check` → `inventory` forecasts
 * DPDP: explicit marketing consent per client, data export (`/api/clients/:id/export`), right-to-erasure
   (anonymises PII, keeps de-identified tax records), agents never message clients without consent.
 * Full audit trail of autonomous actions (`agent_runs`, `agent_events`).
+* **No double booking, ever**: Postgres exclusion constraints on (stylist, time range) and (room, time range)
+  for live bookings — holds even when two serverless functions race during a Diwali rush.
+* **Two-phase AI actions**: the concierge can only *propose* a booking (frozen service/date/time/price in
+  `booking_proposals`); it executes only after the customer's explicit YES. Complaints or two unclear
+  messages hand the thread to a human (`conversations.status = 'human'`) and the AI goes silent.
 * Prompt-injection hygiene: LLM output is parsed into typed JSON and validated (e.g. Studio widgets must
   exist in the registry; concierge only books through the scheduler; prices come from DB, never the model).
 

@@ -3,6 +3,7 @@ import type { AgentDef, Tenant } from "./types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Staff } from "../domain/types";
 import { payrollLine } from "../domain/payroll";
+import { statutory } from "../domain/statutory";
 import { llm, llmJson, extractJson } from "../ai/llm";
 import { istDate, timeToMin } from "../time";
 
@@ -98,6 +99,8 @@ export async function screeningTurn(db: SupabaseClient, tenant: Tenant, candidat
 
 /** Module 4 — Payroll & commission (Indian slab matrices, product cross-sales, tips, penalties). */
 export async function computePayroll(db: SupabaseClient, tenantId: string, from: string, to: string) {
+  const { data: t } = await db.from("tenants").select("state_code").eq("id", tenantId).single();
+  const month = Number(to.slice(5, 7));
   const [{ data: staff }, { data: bookings }, { data: invoices }, { data: adj }] = await Promise.all([
     db.from("staff").select("*").eq("tenant_id", tenantId),
     db.from("bookings").select("staff_id, price").eq("tenant_id", tenantId).eq("status", "completed").gte("start_at", istDate(from, "00:00").toISOString()).lte("start_at", istDate(to, "23:59").toISOString()),
@@ -108,9 +111,14 @@ export async function computePayroll(db: SupabaseClient, tenantId: string, from:
     const svcRev = (bookings ?? []).filter((b) => b.staff_id === st.id).reduce((s, b) => s + Number(b.price), 0);
     const prodRev = (invoices ?? []).flatMap((i) => i.items as { kind: string; staff_id?: string; taxable_value: number }[]).filter((i) => i.kind === "product" && i.staff_id === st.id).reduce((s, i) => s + Number(i.taxable_value), 0);
     const sum = (k: string) => (adj ?? []).filter((a) => a.staff_id === st.id && a.kind === k).reduce((s, a) => s + Number(a.amount), 0);
-    return payrollLine(st, svcRev, prodRev, sum("tip"), sum("penalty"), sum("bonus"));
+    const line = payrollLine(st, svcRev, prodRev, sum("tip"), sum("penalty"), sum("bonus"));
+    if (line.type !== "employee") return { ...line, statutory: null, employer_cost: line.net };
+    // PF / ESI / professional tax (india-payroll rules) on monthly gross wages; tips are pass-through, not wages
+    const gross = line.base + line.service_commission + line.product_commission + line.bonus;
+    const stat = statutory({ basic: line.base, gross, stateCode: t?.state_code, month, gender: st.gender, pf: st.pf_enabled !== false, esi: st.esi_enabled !== false });
+    return { ...line, gross, statutory: stat, net: line.net - stat.employee_deductions, employer_cost: gross + stat.employer_contributions };
   });
-  return { lines, total: lines.reduce((s, l) => s + l.net, 0) };
+  return { lines, total: lines.reduce((s, l) => s + l.net, 0), employer_cost: lines.reduce((s, l) => s + l.employer_cost, 0) };
 }
 
 /** Module 4 — Performance engineering: utilisation + ratings + waste → micro-learning assignments. */
