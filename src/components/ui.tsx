@@ -4,11 +4,11 @@ import { CheckCircle2, AlertTriangle, Sparkles } from "lucide-react";
 
 export function Card({ title, children, actions, className = "", icon }: { title?: ReactNode; children: ReactNode; actions?: ReactNode; className?: string; icon?: ReactNode }) {
   return (
-    <section className={`animate-fade-up rounded-2xl border border-brand-100/80 bg-surface p-4 shadow-soft transition-shadow duration-300 hover:shadow-lift sm:p-5 ${className}`}>
+    <section className={`min-w-0 animate-fade-up rounded-2xl border border-brand-100/80 bg-surface p-4 shadow-soft transition-shadow duration-300 hover:shadow-lift sm:p-5 ${className}`}>
       {(title || actions) && (
-        <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           {title && (
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               {icon && <span className="grid h-7 w-7 place-items-center rounded-lg bg-brand-50 text-brand-600" aria-hidden>{icon}</span>}
               <h2 className="text-sm font-semibold text-brand-900">{title}</h2>
             </div>

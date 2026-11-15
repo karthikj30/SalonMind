@@ -8,6 +8,7 @@ import { SearchBox } from "./SearchBox";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguagePicker } from "@/components/LanguagePicker";
 import { getDict } from "@/lib/i18n/server";
+import { isRtl } from "@/lib/i18n/ui";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Find a salon" };
@@ -27,7 +28,7 @@ export default async function Marketplace() {
     salons = s.data ?? [];
   } catch { /* not configured */ }
   return (
-    <main>
+    <main lang={lang} dir={isRtl(lang) ? "rtl" : undefined}>
       <section className="relative bg-plum-gradient text-white">
         <div className="salon-pattern absolute inset-0 opacity-50" aria-hidden />
         <div className="relative mx-auto max-w-5xl px-4 pb-10 pt-6">

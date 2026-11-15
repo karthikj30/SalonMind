@@ -11,6 +11,10 @@
   --gold-50: 252 248 238; --gold-100: 248 239 217; --gold-200: 240 220 174; --gold-300: 232 207 143; --gold-400: 220 184 96; --gold-500: 201 160 67; --gold-600: 168 129 46; --gold-700: 127 97 35;
   --ivory-50: 255 253 250; --ivory-100: 251 248 244; --ivory-200: 245 239 231; --ivory-300: 235 226 214;
   --surface: 255 255 255; --border: 234 217 230; --shadow: 59 30 56;
+  /* WhatsApp-style chat surfaces (inbox + salon chat widget) */
+  --wa-wall: #efeae2; --wa-in: #ffffff; --wa-out: #d9fdd3; --wa-text: #111b21; --wa-meta: #667781;
+  --wa-head: #008069; --wa-panel: #f0f2f5; --wa-line: #e9edef; --wa-active: #f0f2f5; --wa-note: #ffeecd; --wa-note-text: #54656f;
+  --wa-green: #25d366; --wa-send: #00a884; --wa-tick: #53bdeb; --wa-doodle: rgba(0,0,0,.045);
 }
 /* Dark: the plum scale is inverted (900 = light text, 50 = deep tint) and surfaces become aubergine. */
 .dark {
@@ -21,10 +25,15 @@
   --gold-50: 46 36 18; --gold-100: 58 45 22; --gold-200: 84 65 30; --gold-300: 196 160 82; --gold-400: 220 184 96; --gold-500: 230 199 120; --gold-600: 236 210 140; --gold-700: 242 222 166;
   --ivory-50: 30 18 32; --ivory-100: 22 13 24; --ivory-200: 38 23 41; --ivory-300: 48 30 51;
   --surface: 33 20 35; --border: 66 40 63; --shadow: 0 0 0;
+  --wa-wall: #0b141a; --wa-in: #202c33; --wa-out: #005c4b; --wa-text: #e9edef; --wa-meta: #8696a0;
+  --wa-head: #202c33; --wa-panel: #111b21; --wa-line: #222d34; --wa-active: #2a3942; --wa-note: #182229; --wa-note-text: #ffd279;
+  --wa-doodle: rgba(255,255,255,.035);
 }
 
 @layer base {
   html { -webkit-tap-highlight-color: transparent; }
+  /* grid items default to min-width:auto, so one wide table/word would push a whole column off a phone screen */
+  .grid > * { min-width: 0; }
   body { @apply bg-ivory-100 text-brand-950 antialiased transition-colors duration-300; }
   h1, h2, h3 { @apply tracking-tight; }
   ::selection { @apply bg-rose-200 text-brand-900; }
@@ -41,6 +50,21 @@
 .theme-switching, .theme-switching * { transition: background-color .3s ease, border-color .3s ease, color .2s ease !important; }
 
 @layer components {
+  /* ── WhatsApp look ── */
+  .wa-wall {
+    background-color: var(--wa-wall);
+    background-image: radial-gradient(var(--wa-doodle) 1.2px, transparent 1.3px), radial-gradient(var(--wa-doodle) 1.2px, transparent 1.3px);
+    background-size: 26px 26px; background-position: 0 0, 13px 13px;
+  }
+  .wa-bubble { position: relative; max-width: min(85%, 34rem); border-radius: .5rem; padding: .375rem .5rem .25rem .625rem; color: var(--wa-text); box-shadow: 0 1px .5px rgba(11,20,26,.13); overflow-wrap: anywhere; }
+  .wa-in { background: var(--wa-in); }
+  .wa-out { background: var(--wa-out); }
+  .wa-tail.wa-in { border-top-left-radius: 0; }
+  .wa-tail.wa-out { border-top-right-radius: 0; }
+  .wa-tail.wa-in::before, .wa-tail.wa-out::before { content: ""; position: absolute; top: 0; width: 0; height: 0; border-top: 9px solid; }
+  .wa-tail.wa-in::before { left: -8px; border-top-color: var(--wa-in); border-left: 8px solid transparent; }
+  .wa-tail.wa-out::before { right: -8px; border-top-color: var(--wa-out); border-right: 8px solid transparent; }
+  .wa-meta { color: var(--wa-meta); }
   .salon-pattern {
     background-image: radial-gradient(rgba(201,160,67,.18) 1px, transparent 1px), radial-gradient(rgba(201,160,67,.10) 1px, transparent 1px);
     background-size: 22px 22px, 22px 22px; background-position: 0 0, 11px 11px;

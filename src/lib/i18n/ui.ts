@@ -1,6 +1,9 @@
-/** Consumer-facing UI strings (marketplace, salon page, chat) in six Indian languages. */
+/** Consumer-facing UI strings (marketplace, salon page, chat) in English + 12 Indian languages. */
+import { asm, gu, kn, ml, or, pa, ur } from "./ui-more.ts";
+
 export const UI_LANGS = [
-  ["en", "English"], ["hi", "हिन्दी"], ["mr", "मराठी"], ["ta", "தமிழ்"], ["te", "తెలుగు"], ["bn", "বাংলা"],
+  ["en", "English"], ["hi", "हिन्दी"], ["bn", "বাংলা"], ["mr", "मराठी"], ["te", "తెలుగు"], ["ta", "தமிழ்"],
+  ["gu", "ગુજરાતી"], ["ur", "اردو"], ["kn", "ಕನ್ನಡ"], ["or", "ଓଡ଼ିଆ"], ["ml", "മലയാളം"], ["pa", "ਪੰਜਾਬੀ"], ["as", "অসমীয়া"],
 ] as const;
 export type UiLang = (typeof UI_LANGS)[number][0];
 export const LANG_COOKIE = "sm_lang";
@@ -32,6 +35,7 @@ const en = {
   chatBtn: "Chat & book", chatSub: "AI receptionist · any language · books for you",
   chatIntro: "Namaste! Ask about prices, free slots or book directly — e.g. “kal 6 baje haircut?”. I'll confirm before booking anything.",
   mobilePh: "Your mobile (+91…)", msgPh: "Type a message…", language: "Language",
+  online: "online", typing: "typing…", openWa: "Continue on WhatsApp",
 };
 export type Dict = typeof en;
 
@@ -62,6 +66,7 @@ const hi: Dict = {
   chatBtn: "चैट करें और बुक करें", chatSub: "AI रिसेप्शनिस्ट · किसी भी भाषा में · आपके लिए बुकिंग",
   chatIntro: "नमस्ते! कीमत, खाली समय पूछें या सीधे बुक करें — जैसे “कल 6 बजे हेयरकट?”। बुकिंग से पहले मैं पुष्टि लूँगा।",
   mobilePh: "आपका मोबाइल (+91…)", msgPh: "संदेश लिखें…", language: "भाषा",
+  online: "ऑनलाइन", typing: "लिख रहे हैं…", openWa: "WhatsApp पर जारी रखें",
 };
 
 const mr: Dict = {
@@ -91,6 +96,7 @@ const mr: Dict = {
   chatBtn: "चॅट करा आणि बुक करा", chatSub: "AI रिसेप्शनिस्ट · कोणत्याही भाषेत · तुमच्यासाठी बुकिंग",
   chatIntro: "नमस्कार! किंमत, मोकळी वेळ विचारा किंवा थेट बुक करा — उदा. “उद्या 6 वाजता हेअरकट?”. बुकिंगपूर्वी मी पुष्टी घेईन.",
   mobilePh: "तुमचा मोबाइल (+91…)", msgPh: "संदेश लिहा…", language: "भाषा",
+  online: "ऑनलाइन", typing: "लिहित आहे…", openWa: "WhatsApp वर सुरू ठेवा",
 };
 
 const ta: Dict = {
@@ -120,6 +126,7 @@ const ta: Dict = {
   chatBtn: "அரட்டை & முன்பதிவு", chatSub: "AI வரவேற்பாளர் · எந்த மொழியிலும் · உங்களுக்காக முன்பதிவு",
   chatIntro: "வணக்கம்! விலை, காலி நேரம் கேளுங்கள் அல்லது நேரடியாக முன்பதிவு செய்யுங்கள் — எ.கா. “நாளை 6 மணிக்கு ஹேர்கட்?”. முன்பதிவுக்கு முன் உறுதி கேட்பேன்.",
   mobilePh: "உங்கள் மொபைல் (+91…)", msgPh: "செய்தியை எழுதுங்கள்…", language: "மொழி",
+  online: "ஆன்லைன்", typing: "தட்டச்சு செய்கிறது…", openWa: "WhatsApp-இல் தொடரவும்",
 };
 
 const te: Dict = {
@@ -149,6 +156,7 @@ const te: Dict = {
   chatBtn: "చాట్ & బుక్", chatSub: "AI రిసెప్షనిస్ట్ · ఏ భాషలోనైనా · మీ కోసం బుకింగ్",
   chatIntro: "నమస్కారం! ధరలు, ఖాళీ సమయాలు అడగండి లేదా నేరుగా బుక్ చేయండి — ఉదా. “రేపు 6 గంటలకు హెయిర్ కట్?”. బుక్ చేసే ముందు నిర్ధారణ అడుగుతాను.",
   mobilePh: "మీ మొబైల్ (+91…)", msgPh: "సందేశం రాయండి…", language: "భాష",
+  online: "ఆన్‌లైన్", typing: "టైప్ చేస్తోంది…", openWa: "WhatsAppలో కొనసాగించండి",
 };
 
 const bn: Dict = {
@@ -178,12 +186,15 @@ const bn: Dict = {
   chatBtn: "চ্যাট ও বুকিং", chatSub: "AI রিসেপশনিস্ট · যেকোনো ভাষায় · আপনার জন্য বুকিং",
   chatIntro: "নমস্কার! দাম, খালি সময় জিজ্ঞাসা করুন বা সরাসরি বুক করুন — যেমন “আগামীকাল ৬টায় চুল কাটা?”। বুক করার আগে নিশ্চিত করে নেব।",
   mobilePh: "আপনার মোবাইল (+91…)", msgPh: "বার্তা লিখুন…", language: "ভাষা",
+  online: "অনলাইন", typing: "লিখছে…", openWa: "WhatsApp-এ চালিয়ে যান",
 };
 
-const DICTS: Record<UiLang, Dict> = { en, hi, mr, ta, te, bn };
+const DICTS: Record<UiLang, Dict> = { en, hi, mr, ta, te, bn, gu, kn, ml, pa, or, ur, as: asm };
 export function dict(lang: string | null | undefined): Dict {
   return DICTS[(lang ?? "en") as UiLang] ?? en;
 }
+/** Right-to-left scripts among the supported languages. */
+export const isRtl = (lang: string | null | undefined) => lang === "ur";
 export const fill = (s: string, v: Record<string, string>) => s.replace(/\{(\w+)\}/g, (_, k) => v[k] ?? "");
 /** English search keywords behind each category chip (shared across languages). */
 export const CHIP_QUERIES = ["haircut", "hair colour balayage", "facial skin", "manicure nail art", "bridal makeup", "men's haircut beard", "spa massage"];

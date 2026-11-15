@@ -15,6 +15,7 @@ import { category, monogram } from "@/lib/ui/categories";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguagePicker } from "@/components/LanguagePicker";
 import { getDict } from "@/lib/i18n/server";
+import { isRtl } from "@/lib/i18n/ui";
 import { fill } from "@/lib/i18n/ui";
 import { ArrowLeft, CheckCircle2, Clock, MapPin, Star, Ticket } from "lucide-react";
 
@@ -60,7 +61,7 @@ export default async function SalonPage({ params, searchParams }: { params: Prom
   const selected = (services ?? []).find((sv) => sv.id === serviceId);
   const input = "w-full rounded-xl border border-brand-200/80 bg-ivory-50 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200";
   return (
-    <main>
+    <main lang={lang} dir={isRtl(lang) ? "rtl" : undefined}>
       <header className={`relative bg-gradient-to-br ${m.gradient} text-white`}>
         <div className="salon-pattern absolute inset-0 opacity-50" aria-hidden />
         <div className="relative mx-auto max-w-5xl px-4 pb-16 pt-5">
@@ -74,12 +75,12 @@ export default async function SalonPage({ params, searchParams }: { params: Prom
             <h1 className="font-display text-3xl font-semibold text-brand-900">{tenant.name}</h1>
             <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-brand-900/60">
               {(tenant.address || tenant.city) && <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{[tenant.address, tenant.city].filter(Boolean).join(", ")}</span>}
-              <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" />{tenant.open_time.slice(0, 5)}–{tenant.close_time.slice(0, 5)}</span>
+              <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" /><bdi dir="ltr">{tenant.open_time.slice(0, 5)}–{tenant.close_time.slice(0, 5)}</bdi></span>
               {ratingAvg !== null && <span className="inline-flex items-center gap-1 text-gold-700"><Star className="h-3.5 w-3.5 fill-gold-400 text-gold-400" />{ratingAvg.toFixed(1)} · {ratingCount} {ratingCount === 1 ? tx.rating : tx.ratings}</span>}
             </p>
           </div>
         </div>
-        {tenant.description && <p className="mt-4 max-w-2xl text-sm leading-relaxed text-brand-900/70">{tenant.description}</p>}
+        {tenant.description && <p dir="auto" className="mt-4 max-w-2xl text-sm leading-relaxed text-brand-900/70">{tenant.description}</p>}
         {sp.error && <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-800">{sp.error}</p>}
         {booked && (
           <div className="mt-5 animate-fade-in rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm">
@@ -107,7 +108,7 @@ export default async function SalonPage({ params, searchParams }: { params: Prom
                   <ul className="divide-y divide-brand-50 overflow-hidden rounded-2xl border border-brand-100 bg-surface shadow-soft">
                     {list.map((sv) => (
                       <li key={sv.id} className={`flex items-center justify-between gap-3 p-4 text-sm ${sv.id === serviceId ? "bg-brand-50/60" : ""}`}>
-                        <div className="min-w-0"><p className="font-medium text-brand-900">{sv.name}</p>{sv.description && <p className="truncate text-xs text-brand-900/50">{sv.description}</p>}<p className="text-xs text-brand-900/45">{sv.duration_min} {tx.min}</p></div>
+                        <div className="min-w-0"><p className="font-medium text-brand-900">{sv.name}</p>{sv.description && <p dir="auto" className="truncate text-xs text-brand-900/50">{sv.description}</p>}<p className="text-xs text-brand-900/45">{sv.duration_min} {tx.min}</p></div>
                         <div className="shrink-0 text-right"><p className="font-semibold text-brand-900">{inr(sv.base_price)}</p><Link href={`?service=${sv.id}&date=${date}#book`} className="text-xs font-medium text-brand-600 hover:underline">{sv.id === serviceId ? tx.selected : tx.pick}</Link></div>
                       </li>
                     ))}
@@ -156,7 +157,7 @@ export default async function SalonPage({ params, searchParams }: { params: Prom
           </section>
         </div>
       </div>
-      <ChatWidget slug={slug} salon={tenant.name} t={{ chatBtn: tx.chatBtn, chatSub: tx.chatSub, chatIntro: tx.chatIntro, mobilePh: tx.mobilePh, msgPh: tx.msgPh }} />
+      <ChatWidget slug={slug} salon={tenant.name} t={{ chatBtn: tx.chatBtn, chatSub: tx.chatSub, chatIntro: tx.chatIntro, mobilePh: tx.mobilePh, msgPh: tx.msgPh, online: tx.online, typing: tx.typing, openWa: tx.openWa }} phone={tenant.phone} rtl={isRtl(lang)} />
     </main>
   );
 }

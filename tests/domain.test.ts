@@ -264,3 +264,45 @@ test("Marketplace queries in Indian languages parse without an LLM", () => {
     assert.equal(i.maxPrice, 1500, q); assert.equal(i.fromTime, "17:00", q); assert.ok(i.date, q); assert.match(i.service, /facial/, q);
   }
 });
+
+import { asciiDigits, isNo as langNo, isYes as langYes } from "../src/lib/i18n/concierge.ts";
+import { dict, isRtl, UI_LANGS } from "../src/lib/i18n/ui.ts";
+
+test("13 languages: booking request in every new script is understood (day, time, intent, language)", () => {
+  const cases: [string, string][] = [
+    ["કાલે સાંજે 6 વાગ્યે હેરકટ બુક કરો", "gu"], ["ನಾಳೆ ಸಂಜೆ 6 ಗಂಟೆಗೆ ಹೇರ್‌ಕಟ್ ಬುಕ್ ಮಾಡಿ", "kn"],
+    ["നാളെ വൈകുന്നേരം 6 മണിക്ക് ഹെയർകട്ട് ബുക്ക് ചെയ്യണം", "ml"], ["ਕੱਲ੍ਹ ਸ਼ਾਮ 6 ਵਜੇ ਹੇਅਰਕੱਟ ਬੁੱਕ ਕਰੋ", "pa"],
+    ["କାଲି ସନ୍ଧ୍ୟା 6 ଟାରେ ହେୟାରକଟ୍ ବୁକ୍ କରନ୍ତୁ", "or"], ["کل شام 6 بجے ہیئر کٹ بک کر دیں", "ur"],
+    ["কাইলৈ সন্ধিয়া ৬ বজাত হেয়াৰকাট বুক কৰক", "as"],
+  ];
+  for (const [msg, lang] of cases) {
+    const r = langIntent(msg);
+    assert.deepEqual([r.language, r.intent, r.dayOffset, r.time], [lang, "book", 1, "18:00"], msg);
+    assert.match(tr(lang, "proposal", { service: "Haircut" }), /Haircut/, lang);
+  }
+  for (const y of ["હા", "ಹೌದು", "അതെ", "ਹਾਂ ਜੀ", "ହଁ", "ہاں", "হয়"]) assert.ok(langYes(y), y);
+  for (const n of ["ના", "ಬೇಡ", "വേണ്ട", "ਨਹੀਂ", "ନା", "نہیں", "নহয়"]) assert.ok(langNo(n), n);
+  assert.equal(asciiDigits("൬ ੬ ૬ ୬ ೬ ۶"), "6 6 6 6 6 6");
+});
+
+test("Colour is not mistaken for 'tomorrow' (कलर ⊃ कल, کلر ⊃ کل, কালার ⊃ কাল)", () => {
+  for (const q of ["आज शाम कलर", "آج شام کلر", "আজ সন্ধ্যায় কালার"]) {
+    const r = langIntent(q); assert.equal(r.dayOffset, 0, q);
+    assert.equal(toEnglishQuery(q), "today evening colour", q);
+  }
+});
+
+test("Every consumer UI language is complete and its example searches parse without an LLM", () => {
+  assert.equal(UI_LANGS.length, 13);
+  const keys = Object.keys(dict("en")).sort();
+  for (const [l] of UI_LANGS) {
+    const d = dict(l);
+    assert.deepEqual(Object.keys(d).sort(), keys, l);
+    assert.equal(d.chips.length, 7, l);
+    for (const q of d.examples) {
+      const i = parseIntent(toEnglishQuery(q), []);
+      assert.ok(i.date && /facial|haircut|colour|balayage|beard/.test(i.service), `${l}: ${q} → ${toEnglishQuery(q)}`);
+    }
+  }
+  assert.ok(isRtl("ur") && !isRtl("hi"));
+});

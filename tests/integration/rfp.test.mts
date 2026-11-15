@@ -345,6 +345,25 @@ describe("Multilingual conversational AI (RFP §4) — rules engine, no API key"
     assert.equal(bk!.length, 1); assert.equal(toIst(new Date(bk![0].start_at)).time, "11:00");
   });
 
+  test("Kannada and Urdu customers book end-to-end in their own script (13-language rules engine)", async () => {
+    const outs = async (h: string) => (await db.from("messages").select("body").eq("tenant_id", tenant.id).eq("contact_handle", h).eq("direction", "out").order("created_at")).data!;
+    for (const [h, ask, yes, proposalRe, confirmedRe, time] of [
+      ["+919811100022", "ನಾಳೆ 12 ಗಂಟೆಗೆ ಫೇಶಿಯಲ್ ಬುಕ್ ಮಾಡಿ", "ಹೌದು", /ಖಚಿತಪಡಿಸಲು/, /ಬುಕಿಂಗ್ ಖಚಿತ/, "12:00"],
+      ["+919811100023", "کل 2 بجے فیشل بک کرنا ہے", "ہاں", /تصدیق کے لیے/, /بکنگ پکی/, "14:00"],
+    ] as const) {
+      await receiveMessage(db, tenant.id, { channel: "whatsapp", handle: h, body: ask });
+      await processEvents(db, tenant);
+      const first = (await outs(h)).at(-1)!.body;
+      assert.match(first, proposalRe, `native-script proposal expected, got: ${first}`);
+      assert.match(first, /Classic facial/);
+      await receiveMessage(db, tenant.id, { channel: "whatsapp", handle: h, body: yes });
+      await processEvents(db, tenant);
+      assert.match((await outs(h)).at(-1)!.body, confirmedRe);
+      const { data: bk } = await db.from("bookings").select("start_at, clients!inner(phone)").eq("tenant_id", tenant.id).eq("clients.phone", h);
+      assert.equal(bk!.length, 1, h); assert.equal(toIst(new Date(bk![0].start_at)).time, time);
+    }
+  });
+
   test("Hindi price question gets a Hindi answer from real catalogue data", async () => {
     const h = "+919811100021";
     await receiveMessage(db, tenant.id, { channel: "instagram", handle: h, body: "फेशियल कितने का है?" });

@@ -24,6 +24,8 @@ redesigned marketplace and salon booking page. Screenshots below come from an au
 | ![Landing](docs/screenshots/landing.jpg) | ![Dashboard](docs/screenshots/dashboard.jpg) | ![Bookings](docs/screenshots/bookings.jpg) |
 | **Marketplace** | **Salon page** | **Mobile menu** |
 | ![Marketplace](docs/screenshots/marketplace.jpg) | ![Salon](docs/screenshots/salon.jpg) | ![Mobile](docs/screenshots/m-menu.jpg) |
+| **WhatsApp-style unified inbox** | **Inbox on a phone** | **Marketplace in Urdu (RTL)** |
+| ![Inbox](docs/screenshots/inbox-whatsapp.jpg) | ![Phone inbox](docs/screenshots/m-inbox.jpg) | ![Urdu](docs/screenshots/m-urdu.jpg) |
 
 ## Stack (all free)
 
@@ -33,6 +35,12 @@ then a deterministic, multilingual rules engine. Also ships as **Kubernetes micr
 HPAs, CronJob) — see [`docs/DEPLOY_K8S.md`](docs/DEPLOY_K8S.md) — with AES-256-GCM field encryption
 ([`docs/SECURITY.md`](docs/SECURITY.md)). Light/dark themes with motion that respects reduced-motion settings.
 Works with **no AI key at all** (rules-engine mode); add a free key to unlock multilingual LLM behaviour.
+
+**13 languages, no key needed:** English, हिन्दी, বাংলা, मराठी, తెలుగు, தமிழ், ગુજરાતી, اردو (right-to-left), ಕನ್ನಡ,
+ଓଡ଼ିଆ, മലയാളം, ਪੰਜਾਬੀ and অসমীয়া — for the marketplace, salon page and chat, natural-language search, and the AI
+Concierge (it detects the script, understands "tomorrow 6 o'clock haircut", proposes and confirms bookings in the
+customer's own language). The **Unified Inbox** looks and works like WhatsApp (chat list, ticks, wallpaper, take-over,
+open in WhatsApp), and every page is checked at phone width by the E2E test.
 
 ## 16 agents
 
@@ -76,10 +84,10 @@ After adding `GEMINI_API_KEY`, click **Settings → Re-index services** to switc
 ## Tests
 
 ```bash
-npm run typecheck && npm test && npm run build      # 30 unit tests (GST, payroll, scheduler, pricing, loyalty…)
-npm run test:integration                            # 38 tests against the real Supabase DB
-python3 scripts/validate_k8s.py                      # static validation of the Kubernetes manifests — every RFP bullet + tenant isolation
-BASE_URL=http://localhost:3000 node tests/e2e.mjs   # browser E2E through the real UI (cleans up via account deletion)
+npm run typecheck && npm test && npm run build      # 33 unit tests (GST, payroll, scheduler, pricing, loyalty…)
+npm run test:integration                            # 39 tests against the real Supabase DB
+python3 scripts/validate_k8s.py                      # static validation of the Kubernetes manifests
+BASE_URL=http://localhost:3000 node tests/e2e.mjs   # browser E2E through the real UI + 390px phone audit (cleans up via account deletion)
 ```
 
 ## Autonomy (cron)

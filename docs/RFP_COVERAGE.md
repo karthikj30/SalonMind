@@ -3,11 +3,11 @@
 Every requirement in `docs/Salon_Management_System_RFP.pdf`, where it lives in the code, and the test
 that proves it. Three test layers:
 
-* **Unit** — `npm test` → `tests/domain.test.ts` (30 tests, pure business rules)
+* **Unit** — `npm test` → `tests/domain.test.ts` (33 tests, pure business rules)
 * **Integration (real Postgres, no mocks)** — `npm run test:integration` → `tests/integration/rfp.test.mts`
-  (38 tests; creates a throw-away salon through the same service functions the UI uses, runs the real
+  (39 tests; creates a throw-away salon through the same service functions the UI uses, runs the real
   agents, asserts on rows they wrote, deletes everything)
-* **E2E (real browser, real UI)** — `BASE_URL=… node tests/e2e.mjs` (signup → … → account deletion)
+* **E2E (real browser, real UI)** — `BASE_URL=… node tests/e2e.mjs` (signup → … → 390px phone audit → account deletion)
 
 ## §1–2 Objective & architecture
 
@@ -34,7 +34,7 @@ that proves it. Three test layers:
 |---|---|---|
 | Retention cycles: 4-week client at week 5 → personalised WhatsApp/SMS | `churn` (cycle) + `retention` agents | UNIT *CRM: 4-week client…*; INT *Autonomous campaign: 4-week client at week 5…* |
 | Predictive churn (review sentiment + visit frequency) → recovery | `churn` → `client.at_risk` → `retention` recovery | INT *Churn: negative review + drifting frequency…* |
-| Unified inbox (Instagram, WhatsApp, Google, calls) + AI rep | `concierge` agent, `/app/inbox`, public web chat | INT *Unified inbox: every channel gets an AI reply…*; E2E inbox |
+| Unified inbox (Instagram, WhatsApp, Google, calls) + AI rep | `concierge` agent, WhatsApp-style `/app/inbox` (chat list, ticks, AI/human filter, take-over, open in WhatsApp, reply-as-salon / test-as-customer composer), WhatsApp-style public web chat | INT *Unified inbox: every channel gets an AI reply…*; E2E inbox (proposal → customer YES from the thread composer) |
 
 ## Module 3 — Scheduling & resources
 
@@ -78,9 +78,9 @@ that proves it. Three test layers:
 | PostgreSQL for transactional data | Supabase Postgres, RLS, exclusion constraints | all INT tests |
 | **Vector DB (pgvector)** | `services.embedding vector(768)` + `match_services`; LangChain `Embeddings` (Gemini / local) | INT *Intent search…* |
 | LLMs (**OpenAI GPT, Anthropic Claude, Google Gemini**) via **LangChain** | `src/lib/ai/llm.ts` on **LangChain.js** `BaseChatModel`s: Gemini, OpenAI GPT, Claude, plus free Groq/OpenRouter/HF/Ollama; fallback chain + rules engine | every INT test (rules mode); `USE_LLM_IN_TESTS=1` with keys |
-| Multilingual conversational AI (**Hindi, Tamil, Telugu, Bengali, Marathi**…) | LLM replies in the customer's language; **native-script rules engine** for hi/mr/ta/te/bn/en (no key needed) | UNIT *Multilingual rules engine* (6 languages); INT *A customer books entirely in Tamil*, *Hindi price question* |
-| Localized consumer experience | Marketplace, salon page and chat in English, हिन्दी, मराठी, தமிழ், తెలుగు, বাংলা; search understands those languages without an AI key | UNIT *Marketplace queries in Indian languages parse without an LLM* |
-| Low-bandwidth 4G/5G | Server components (~107 kB first load), image downscaling before upload, PWA | build output |
+| Multilingual conversational AI (**Hindi, Tamil, Telugu, Bengali, Marathi**…) | LLM replies in the customer's language; **native-script rules engine for 13 languages** — en, hi, bn, mr, te, ta, gu, ur, kn, or, ml, pa, as (script detection, NFC-normalised keywords, all Indian digit systems; no key needed) | UNIT *Multilingual rules engine*, *13 languages: booking request in every new script…*, *Colour is not mistaken for tomorrow*; INT *A customer books entirely in Tamil*, *Kannada and Urdu customers book end-to-end*, *Hindi price question* |
+| Localized consumer experience | Marketplace, salon page and chat in 13 languages incl. right-to-left Urdu; search understands all of them without an AI key | UNIT *Every consumer UI language is complete and its example searches parse*; E2E phone audit in en/ta/ur |
+| Low-bandwidth 4G/5G, mobile-first | Server components (~111 kB first load), image downscaling before upload, PWA; every owner and consumer page verified at 390px with no sideways scroll | build output; E2E *mobile audit* |
 | Extreme concurrency (festival peaks) | DB exclusion constraints, atomic event claiming, HPAs | INT *Festival rush: 20 simultaneous bookings → exactly one wins* |
 | **AES-256**, ISO 27001 / SOC 2 readiness, **DPDP** | AES-256-GCM field encryption, RLS, audit trail, consent/export/erasure — see `docs/SECURITY.md` | UNIT *AES-256-GCM…*; INT *Tenant isolation…*; E2E DPDP deletion |
 

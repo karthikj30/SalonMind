@@ -37,10 +37,18 @@ Everything below is entered by hand in the UI so you can watch each agent react.
     out-of-state) and cash payable; GSTR-1 shows B2CS + HSN/SAC + document summary.
 
 ## 5. Unified inbox (AI concierge)
-14. **Inbox → Test: incoming message**: channel WhatsApp, from `+91…` (new number), body
-    `kal 11am men's haircut book kar do`. The concierge detects intent/language, books through the
-    scheduler and replies. The booking appears on tomorrow's schedule with source `whatsapp`.
-15. Try Instagram/Google/call-transcript channels, a price question, a cancellation, a complaint.
+14. **Inbox → New test chat** (top of the chat list): channel WhatsApp, from `+91…` (new number), body
+    `kal 11am men's haircut book kar do`. The concierge detects intent/language and *proposes* a slot
+    (green bubble). Type `yes` in the thread composer and press the **phone button** ("send as customer")
+    → it books and confirms. The booking appears on tomorrow's schedule with source `whatsapp`.
+    The green **send** button replies as the salon (human takeover); **Take over / Hand back to AI**
+    pauses or resumes the AI for that chat; the WhatsApp button opens the number in WhatsApp.
+15. Try Instagram/Google/call-transcript channels, a price question, a cancellation, a complaint —
+    and other languages, e.g. `ನಾಳೆ 12 ಗಂಟೆಗೆ ಫೇಶಿಯಲ್ ಬುಕ್ ಮಾಡಿ` (Kannada), `کل 2 بجے فیشل بک کرنا ہے` (Urdu),
+    `ਕੱਲ੍ਹ ਸ਼ਾਮ 6 ਵਜੇ ਹੇਅਰਕੱਟ ਬੁੱਕ ਕਰੋ` (Punjabi). Replies come back in the same script.
+15a. **On a phone** (or DevTools at 390px): the inbox shows the chat list; tapping a chat opens it full
+    screen with a ← back arrow, like WhatsApp. On `/marketplace` switch the language picker to اردو —
+    the page flips right-to-left.
 
 ## 6. CRM automation
 16. To see the 4-week → week-5 campaign, create a client with past visits: book + complete

@@ -187,4 +187,7 @@ export const LANGUAGES: Record<string, string> = {
   ml: "Malayalam",
   gu: "Gujarati",
   pa: "Punjabi",
+  or: "Odia",
+  ur: "Urdu",
+  as: "Assamese",
 };

@@ -12,7 +12,8 @@ const shots = process.env.SHOTS_DIR;
 const log = (...a) => console.log("✔", ...a);
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+const page = await ctx.newPage();
 page.setDefaultTimeout(90_000);
 const shot = async (name) => shots && page.screenshot({ path: `${shots}/${name}.png`, fullPage: true });
 const flash = async () => (await page.locator(".bg-emerald-50, .bg-red-50").first().textContent().catch(() => ""))?.trim();
@@ -31,6 +32,7 @@ async function expectOk(step) {
   log(step, (await flash()) ?? "");
 }
 
+const mobileProblems = [];
 try {
   // ── sign up & onboard
   await page.goto(`${BASE}/signup`);
@@ -138,22 +140,24 @@ try {
   log("invoice issued", (await page.locator("table tbody tr").first().textContent())?.replace(/\s+/g, " "));
   await shot("billing");
 
-  // ── unified inbox: Hinglish booking request
+  // ── unified inbox (WhatsApp-style): Hinglish booking request
   await page.goto(`${BASE}/app/inbox`);
-  f = formWith("Test: incoming message");
+  await page.getByText("New test chat").click();
+  f = page.getByRole("form", { name: "Test: incoming message" });
   await f.locator("select[name=channel]").selectOption("whatsapp");
   await f.locator("input[name=handle]").fill("+919800000002");
   await f.locator("input[name=name]").fill("Rahul");
   await f.locator("textarea[name=body]").fill("Hi, kal 11am men's haircut & beard book kar do please");
   await submit(f); await expectOk("inbox → concierge");
-  const reply = await page.locator(".bg-brand-50 p.whitespace-pre-wrap").last().textContent();
+  const reply = await page.locator(".wa-out p.whitespace-pre-wrap").last().textContent();
   log("concierge reply (proposal):", reply?.slice(0, 160));
   if (!/YES/.test(reply ?? "")) throw new Error("concierge should ask for explicit YES before booking");
-  f = formWith("Test: incoming message");
-  await f.locator("input[name=handle]").fill("+919800000002");
-  await f.locator("textarea[name=body]").fill("yes");
-  await submit(f); await expectOk("customer confirms → booked");
-  const confirmed = await page.locator(".bg-brand-50 p.whitespace-pre-wrap").last().textContent();
+  // customer answers from the thread composer ("send as customer" test button)
+  await page.locator("section[aria-label=Conversation] textarea[name=body]").fill("yes");
+  await page.getByRole("button", { name: "Send as customer (test)" }).click();
+  await page.waitForFunction(() => /Confirmed/.test([...document.querySelectorAll(".wa-out p.whitespace-pre-wrap")].pop()?.textContent ?? ""), null, { timeout: 120_000 }).catch(() => {});
+  await expectOk("customer confirms → booked");
+  const confirmed = await page.locator(".wa-out p.whitespace-pre-wrap").last().textContent();
   if (!/Confirmed/.test(confirmed ?? "")) throw new Error("expected a booking confirmation, got: " + confirmed);
   log("concierge confirmation:", confirmed?.slice(0, 120));
   await shot("inbox");
@@ -227,6 +231,44 @@ try {
   await shot("marketplace");
   if (!found) throw new Error("marketplace search did not find the salon");
 
+  // ── mobile audit: every page at phone width must not scroll sideways (owner app + consumer pages, incl. RTL Urdu)
+  {
+    const m = await page.context().newPage();
+    await m.setViewportSize({ width: 390, height: 844 });
+    const slug = await page.evaluate(() => document.querySelector("a[href^='/s/']")?.getAttribute("href")) ?? null;
+    const routes = ["/app", "/app/bookings", "/app/inbox", "/app/clients", "/app/staff", "/app/services", "/app/inventory", "/app/marketing",
+      "/app/loyalty", "/app/billing", "/app/hr", "/app/agents", "/app/studio", "/app/settings", "/marketplace", ...(slug ? [slug] : [])];
+    const bad = [];
+    for (const lang of ["en", "ta", "ur"]) {
+      await page.context().addCookies([{ name: "sm_lang", value: lang, url: BASE }]);
+      for (const r of lang === "en" ? routes : routes.filter((x) => !x.startsWith("/app"))) {
+        await m.goto(`${BASE}${r}`); await m.waitForLoadState("networkidle").catch(() => {});
+        const o = await m.evaluate(() => {
+          const w = document.documentElement.clientWidth;
+          const wide = [...document.querySelectorAll("body *")].filter((el) => {
+            const b = el.getBoundingClientRect(); if (!b.width || getComputedStyle(el).position === "fixed") return false;
+            let p = el.parentElement; while (p) { const ov = getComputedStyle(p).overflowX; if (ov === "auto" || ov === "scroll" || ov === "hidden") return false; p = p.parentElement; }
+            return b.right > w + 1 || b.left < -1;
+          }).slice(0, 3).map((el) => `${el.tagName.toLowerCase()}.${String(el.className).slice(0, 60)}`);
+          return { scroll: document.documentElement.scrollWidth - w, wide };
+        });
+        if (o.scroll > 1) bad.push(`${lang} ${r}: +${o.scroll}px ${o.wide.join(" | ")}`);
+        if (shots) await m.screenshot({ path: `${shots}/m-${lang}-${r.replace(/\//g, "_") || "root"}.png`, fullPage: false });
+      }
+    }
+    // WhatsApp inbox on a phone: list first, then the thread with a back button
+    await m.goto(`${BASE}/app/inbox`);
+    if (!(await m.locator("aside[aria-label=Conversations]").isVisible())) bad.push("mobile inbox: chat list hidden");
+    await m.locator("aside[aria-label=Conversations] ul a").first().click();
+    await m.waitForSelector("a[aria-label='Back to chats']");
+    if (await m.locator("aside[aria-label=Conversations]").isVisible()) bad.push("mobile inbox: list should hide while a chat is open");
+    if (shots) await m.screenshot({ path: `${shots}/m-inbox-thread.png` });
+    await page.context().addCookies([{ name: "sm_lang", value: "en", url: BASE }]);
+    await m.close();
+    mobileProblems.push(...bad);
+    if (!bad.length) log(`mobile audit: ${routes.length} pages × 3 languages fit a 390px screen; WhatsApp inbox switches list ↔ thread`);
+  }
+
   // ── DPDP: owner deletes account + salon (also cleans up this test run)
   if (!process.env.KEEP_TEST_DATA) {
     await page.goto(`${BASE}/app/settings`);
@@ -237,6 +279,7 @@ try {
     log("account + salon deleted (DPDP erasure)");
   }
 
+  if (mobileProblems.length) throw new Error("mobile layout overflow:\n  " + mobileProblems.join("\n  "));
   log("ALL E2E STEPS PASSED");
 } catch (e) {
   console.error("✘ E2E FAILED:", e.message);
