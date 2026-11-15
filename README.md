@@ -26,8 +26,11 @@ redesigned marketplace and salon booking page. Screenshots below come from an au
 
 ## Stack (all free)
 
-Next.js 15 on Vercel Hobby · Supabase Postgres + pgvector + Auth + pg_cron (Mumbai) · LLM gateway with
-Groq → Gemini → OpenRouter `:free` → Hugging Face → Ollama → deterministic rules engine.
+Next.js 15 on Vercel Hobby · Supabase Postgres + pgvector + Auth + pg_cron (Mumbai) · **LangChain.js** LLM
+layer: free Groq → Gemini → OpenRouter `:free` → Hugging Face → Ollama, optional OpenAI GPT / Anthropic Claude,
+then a deterministic, multilingual rules engine. Also ships as **Kubernetes microservices** (web + agent-worker,
+HPAs, CronJob) — see [`docs/DEPLOY_K8S.md`](docs/DEPLOY_K8S.md) — with AES-256-GCM field encryption
+([`docs/SECURITY.md`](docs/SECURITY.md)). Light/dark themes with motion that respects reduced-motion settings.
 Works with **no AI key at all** (rules-engine mode); add a free key to unlock multilingual LLM behaviour.
 
 ## 16 agents
@@ -72,8 +75,8 @@ After adding `GEMINI_API_KEY`, click **Settings → Re-index services** to switc
 ## Tests
 
 ```bash
-npm run typecheck && npm test && npm run build      # 24 domain unit tests (GST, payroll, scheduler, pricing, loyalty…)
-npm run test:integration                            # 32 tests against the real Supabase DB — every RFP bullet + tenant isolation
+npm run typecheck && npm test && npm run build      # 27 unit tests (GST, payroll, scheduler, pricing, loyalty…)
+npm run test:integration                            # 37 tests against the real Supabase DB — every RFP bullet + tenant isolation
 BASE_URL=http://localhost:3000 node tests/e2e.mjs   # browser E2E through the real UI (cleans up via account deletion)
 ```
 

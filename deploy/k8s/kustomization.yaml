@@ -1,0 +1,7 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: salonmind
+resources: [namespace.yaml, config.yaml, web.yaml, agent-worker.yaml, cronjob-tick.yaml, ingress.yaml]
+# images:   # pin registry images per environment
+#   - { name: salonmind-web:local, newName: asia-south1-docker.pkg.dev/PROJECT/salonmind/web, newTag: "SHA" }
+#   - { name: salonmind-worker:local, newName: asia-south1-docker.pkg.dev/PROJECT/salonmind/agent-worker, newTag: "SHA" }

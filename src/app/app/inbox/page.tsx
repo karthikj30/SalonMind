@@ -48,7 +48,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Re
           </form>) : null}>
           <div className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto">
             {thread.map((m) => (
-              <div key={m.id} className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${m.direction === "in" ? "self-start bg-brand-50" : "self-end bg-brand-50"}`}>
+              <div key={m.id} className={`max-w-[85%] animate-fade-up rounded-xl px-3 py-2 text-sm ${m.direction === "in" ? "self-start bg-brand-50" : "self-end bg-brand-50"}`}>
                 <p className="whitespace-pre-wrap">{m.body}</p>
                 <p className="mt-1 flex flex-wrap gap-1 text-[10px] text-brand-900/55">
                   {CH[m.channel]} · {fmtDateTime(m.created_at)} {m.agent && <Badge tone="violet">{m.agent}</Badge>} {m.direction === "out" && <Badge tone={m.status === "sent" ? "green" : "amber"}>{m.status}</Badge>}

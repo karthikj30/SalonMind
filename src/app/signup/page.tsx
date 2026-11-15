@@ -11,7 +11,7 @@ export default async function Signup({ searchParams }: { searchParams: Promise<R
   return (
     <AuthShell title="Create your account" subtitle="Free forever on the starter tier. Set up takes about 5 minutes.">
       <Flash error={sp.error} />
-      <form action={signUp} className="space-y-4 rounded-2xl border border-brand-100 bg-white p-6 shadow-soft">
+      <form action={signUp} className="space-y-4 rounded-2xl border border-brand-100 bg-surface p-6 shadow-soft">
         <Field label="Your name"><Input name="name" required autoComplete="name" /></Field>
         <Field label="Email"><Input name="email" type="email" required autoComplete="email" /></Field>
         <Field label="Password" hint="At least 8 characters"><Input name="password" type="password" minLength={8} required autoComplete="new-password" /></Field>

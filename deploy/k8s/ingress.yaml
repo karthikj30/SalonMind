@@ -1,0 +1,12 @@
+# GKE: ingressClassName gce + a ManagedCertificate; EKS: alb + ACM certificate annotation.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: salonmind
+  namespace: salonmind
+  annotations: { nginx.ingress.kubernetes.io/proxy-body-size: "8m" }
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: salonmind.example.in
+      http: { paths: [{ path: /, pathType: Prefix, backend: { service: { name: web, port: { name: http } } } }] }

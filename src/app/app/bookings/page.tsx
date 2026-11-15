@@ -33,11 +33,11 @@ export default async function Bookings({ searchParams }: { searchParams: Promise
     <>
       <PageHeader eyebrow="Front desk" title="Bookings" subtitle="Bookings go through the matrix scheduler (skill × room × equipment × margin) and yield pricing; the No-Show Agent scores each one instantly.">
         <form className="flex items-end gap-2">
-          <a className="rounded-xl border border-brand-200 bg-white px-3 py-2 text-sm hover:bg-brand-50" href={`?date=${addDays(date, -1)}`} aria-label="Previous day">←</a>
-          <a className="rounded-xl border border-brand-200 bg-white px-3 py-2 text-sm hover:bg-brand-50" href={`?date=${todayIst()}`}>Today</a>
+          <a className="rounded-xl border border-brand-200 bg-surface px-3 py-2 text-sm hover:bg-brand-50" href={`?date=${addDays(date, -1)}`} aria-label="Previous day">←</a>
+          <a className="rounded-xl border border-brand-200 bg-surface px-3 py-2 text-sm hover:bg-brand-50" href={`?date=${todayIst()}`}>Today</a>
           <Input type="date" name="date" defaultValue={date} />
-          <button className="rounded-xl border border-brand-200 bg-white px-3 py-2 text-sm hover:bg-brand-50">Go</button>
-          <a className="rounded-xl border border-brand-200 bg-white px-3 py-2 text-sm hover:bg-brand-50" href={`?date=${addDays(date, 1)}`} aria-label="Next day">→</a>
+          <button className="rounded-xl border border-brand-200 bg-surface px-3 py-2 text-sm hover:bg-brand-50">Go</button>
+          <a className="rounded-xl border border-brand-200 bg-surface px-3 py-2 text-sm hover:bg-brand-50" href={`?date=${addDays(date, 1)}`} aria-label="Next day">→</a>
         </form>
       </PageHeader>
       <Flash msg={sp.msg} error={sp.error ?? planError ?? undefined} />

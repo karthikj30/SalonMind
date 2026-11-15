@@ -1,15 +1,26 @@
 import "server-only";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { AIMessage, HumanMessage, SystemMessage, type BaseMessage } from "@langchain/core/messages";
+import { ChatGroq } from "@langchain/groq";
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { ChatOpenAI } from "@langchain/openai";
+import { ChatAnthropic } from "@langchain/anthropic";
 
 /**
- * Unified LLM abstraction layer — free-tier providers only.
+ * Unified LLM abstraction layer built on **LangChain.js** (RFP §4 "AI / LLM Layer").
  *
- * Order of preference (first configured + healthy provider wins, the rest are fallbacks):
- *   1. Groq          — Llama 3.3 70B (free tier, very fast)          GROQ_API_KEY
- *   2. Google Gemini — Gemini 2.5 Flash (free tier, vision + embed)  GEMINI_API_KEY
- *   3. OpenRouter    — any ":free" model                             OPENROUTER_API_KEY
- *   4. Hugging Face  — Inference Providers router (free credits)     HF_TOKEN
- *   5. Ollama        — fully local open models for development       OLLAMA_BASE_URL
- *   6. Rules engine  — deterministic fallback inside each agent (callers handle `null`)
+ * Every agent talks to `llm()` / `llmJson()` / `llmText()`; underneath, each provider is a LangChain
+ * `BaseChatModel`, so the chain is provider-agnostic and providers can be swapped by env var.
+ *
+ * Order (first healthy model wins; the rest are fallbacks):
+ *   free   1. Groq           — Llama 3.3 70B / Llama 4 Scout (vision)      GROQ_API_KEY
+ *   free   2. Google Gemini  — Gemini 2.5 Flash (vision)                   GEMINI_API_KEY
+ *   free   3. OpenRouter     — ":free" models (OpenAI-compatible)          OPENROUTER_API_KEY
+ *   free   4. Hugging Face   — Inference Providers router                  HF_TOKEN
+ *   free   5. Ollama         — local open models                           OLLAMA_BASE_URL
+ *   paid   6. OpenAI GPT     — optional, only if you add a key              OPENAI_API_KEY
+ *   paid   7. Anthropic Claude — optional, only if you add a key            ANTHROPIC_API_KEY
+ *          8. Rules engine   — deterministic fallback inside each agent (callers handle `null`)
  */
 
 export type ChatMsg = { role: "system" | "user" | "assistant"; content: string };
@@ -27,136 +38,95 @@ type Opts = {
 
 const TIMEOUT_MS = 25_000;
 
-async function fetchJson(url: string, init: RequestInit) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(url, { ...init, signal: ctrl.signal, cache: "no-store" });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(`${res.status} ${JSON.stringify(body).slice(0, 300)}`);
-    return body;
-  } finally {
-    clearTimeout(t);
-  }
-}
+export type Provider = {
+  name: string;
+  tier: "free" | "paid";
+  vision: boolean;
+  enabled: () => boolean;
+  model: (o: { temperature: number; maxTokens: number; image: boolean; json: boolean }) => BaseChatModel;
+  label: (image: boolean) => string;
+};
 
-function openAiMessages(o: Opts) {
-  const msgs: unknown[] = [];
-  if (o.system) msgs.push({ role: "system", content: o.system });
-  o.messages.forEach((m, i) => {
-    const isLastUser = i === o.messages.length - 1 && m.role === "user";
-    if (o.image && isLastUser) {
-      msgs.push({
-        role: "user",
-        content: [
-          { type: "text", text: m.content },
-          { type: "image_url", image_url: { url: `data:${o.image.mime};base64,${o.image.base64}` } },
-        ],
-      });
-    } else msgs.push(m);
-  });
-  return msgs;
-}
+const oaCompat = (name: string, baseURL: string, keyEnv: string | null, modelEnv: string, fallbackModel: string): Provider => ({
+  name, tier: "free", vision: false,
+  enabled: () => (keyEnv ? !!process.env[keyEnv] : !!process.env.OLLAMA_BASE_URL),
+  label: () => process.env[modelEnv] || fallbackModel,
+  model: ({ temperature, maxTokens }) => new ChatOpenAI({
+    model: process.env[modelEnv] || fallbackModel, temperature, maxTokens, maxRetries: 0,
+    apiKey: keyEnv ? process.env[keyEnv] : "ollama",
+    configuration: { baseURL: name === "ollama" ? `${process.env.OLLAMA_BASE_URL}/v1` : baseURL },
+  }),
+});
 
-async function openAiCompatible(name: string, url: string, key: string | undefined, model: string, o: Opts): Promise<LlmResult> {
-  const body: Record<string, unknown> = {
-    model,
-    messages: openAiMessages(o),
-    temperature: o.temperature ?? 0.4,
-    max_tokens: o.maxTokens ?? 900,
-  };
-  if (o.json) body.response_format = { type: "json_object" };
-  const headers: Record<string, string> = { "content-type": "application/json" };
-  if (key) headers.authorization = `Bearer ${key}`;
-  const data = await fetchJson(url, { method: "POST", headers, body: JSON.stringify(body) });
-  const text = data?.choices?.[0]?.message?.content;
-  if (!text) throw new Error("empty completion");
-  return { text, provider: `${name}/${model}` };
-}
-
-async function gemini(o: Opts): Promise<LlmResult> {
-  const key = process.env.GEMINI_API_KEY!;
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-  const contents = o.messages.map((m, i) => {
-    const parts: unknown[] = [{ text: m.content }];
-    if (o.image && i === o.messages.length - 1) parts.push({ inline_data: { mime_type: o.image.mime, data: o.image.base64 } });
-    return { role: m.role === "assistant" ? "model" : "user", parts };
-  });
-  const body: Record<string, unknown> = {
-    contents,
-    generationConfig: {
-      temperature: o.temperature ?? 0.4,
-      maxOutputTokens: o.maxTokens ?? 900,
-      ...(o.json ? { responseMimeType: "application/json" } : {}),
-      thinkingConfig: { thinkingBudget: 0 },
-    },
-  };
-  if (o.system) body.systemInstruction = { parts: [{ text: o.system }] };
-  const data = await fetchJson(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) },
-  );
-  const text = data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("");
-  if (!text) throw new Error("empty completion");
-  return { text, provider: `gemini/${model}` };
-}
-
-type Provider = { name: string; enabled: () => boolean; vision: boolean; call: (o: Opts) => Promise<LlmResult> };
-
-const PROVIDERS: Provider[] = [
+export const PROVIDERS: Provider[] = [
   {
-    name: "groq",
-    enabled: () => !!process.env.GROQ_API_KEY,
-    vision: true,
-    call: (o) =>
-      openAiCompatible(
-        "groq",
-        "https://api.groq.com/openai/v1/chat/completions",
-        process.env.GROQ_API_KEY,
-        o.image
-          ? process.env.GROQ_VISION_MODEL || "meta-llama/llama-4-scout-17b-16e-instruct"
-          : process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
-        o,
-      ),
-  },
-  { name: "gemini", enabled: () => !!process.env.GEMINI_API_KEY, vision: true, call: gemini },
-  {
-    name: "openrouter",
-    enabled: () => !!process.env.OPENROUTER_API_KEY,
-    vision: false,
-    call: (o) =>
-      openAiCompatible(
-        "openrouter",
-        "https://openrouter.ai/api/v1/chat/completions",
-        process.env.OPENROUTER_API_KEY,
-        process.env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free",
-        o,
-      ),
+    name: "groq", tier: "free", vision: true, enabled: () => !!process.env.GROQ_API_KEY,
+    label: (img) => (img ? process.env.GROQ_VISION_MODEL || "meta-llama/llama-4-scout-17b-16e-instruct" : process.env.GROQ_MODEL || "llama-3.3-70b-versatile"),
+    model: ({ temperature, maxTokens, image }) => new ChatGroq({
+      model: image ? process.env.GROQ_VISION_MODEL || "meta-llama/llama-4-scout-17b-16e-instruct" : process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+      apiKey: process.env.GROQ_API_KEY, temperature, maxTokens, maxRetries: 0,
+    }),
   },
   {
-    name: "huggingface",
-    enabled: () => !!process.env.HF_TOKEN,
-    vision: false,
-    call: (o) =>
-      openAiCompatible(
-        "huggingface",
-        "https://router.huggingface.co/v1/chat/completions",
-        process.env.HF_TOKEN,
-        process.env.HF_MODEL || "meta-llama/Llama-3.3-70B-Instruct",
-        o,
-      ),
+    name: "gemini", tier: "free", vision: true, enabled: () => !!process.env.GEMINI_API_KEY,
+    label: () => process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    model: ({ temperature, maxTokens, json }) => new ChatGoogleGenerativeAI({
+      model: process.env.GEMINI_MODEL || "gemini-2.5-flash", apiKey: process.env.GEMINI_API_KEY, temperature,
+      maxOutputTokens: maxTokens, maxRetries: 0, json, thinkingConfig: { thinkingBudget: 0 },
+    }),
+  },
+  oaCompat("openrouter", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY", "OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free"),
+  oaCompat("huggingface", "https://router.huggingface.co/v1", "HF_TOKEN", "HF_MODEL", "meta-llama/Llama-3.3-70B-Instruct"),
+  oaCompat("ollama", "", null, "OLLAMA_MODEL", "llama3.2"),
+  {
+    name: "openai", tier: "paid", vision: true, enabled: () => !!process.env.OPENAI_API_KEY,
+    label: () => process.env.OPENAI_MODEL || "gpt-4o-mini",
+    model: ({ temperature, maxTokens }) => new ChatOpenAI({ model: process.env.OPENAI_MODEL || "gpt-4o-mini", apiKey: process.env.OPENAI_API_KEY, temperature, maxTokens, maxRetries: 0 }),
   },
   {
-    name: "ollama",
-    enabled: () => !!process.env.OLLAMA_BASE_URL,
-    vision: false,
-    call: (o) =>
-      openAiCompatible("ollama", `${process.env.OLLAMA_BASE_URL}/v1/chat/completions`, undefined, process.env.OLLAMA_MODEL || "llama3.2", o),
+    name: "anthropic", tier: "paid", vision: true, enabled: () => !!process.env.ANTHROPIC_API_KEY,
+    label: () => process.env.ANTHROPIC_MODEL || "claude-opus-5-5",
+    // Current Claude models reject sampling params (temperature/top_p) and always think, so no temperature
+    // and a roomier max_tokens than the free providers.
+    model: ({ maxTokens }) => new ChatAnthropic({ model: process.env.ANTHROPIC_MODEL || "claude-opus-5-5", apiKey: process.env.ANTHROPIC_API_KEY, maxTokens: Math.max(maxTokens, 8000), maxRetries: 0 }),
   },
 ];
 
+/** Convert our provider-neutral messages to LangChain messages (image attached to the last user turn). */
+export function toLangChain(o: Pick<Opts, "system" | "messages" | "image">): BaseMessage[] {
+  const out: BaseMessage[] = [];
+  if (o.system) out.push(new SystemMessage(o.system));
+  o.messages.forEach((m, i) => {
+    if (m.role === "assistant") return void out.push(new AIMessage(m.content));
+    if (o.image && i === o.messages.length - 1) {
+      out.push(new HumanMessage({ content: [{ type: "text", text: m.content }, { type: "image_url", image_url: { url: `data:${o.image.mime};base64,${o.image.base64}` } }] }));
+    } else out.push(new HumanMessage(m.content));
+  });
+  return out;
+}
+
+const textOf = (content: unknown): string =>
+  typeof content === "string" ? content : Array.isArray(content) ? content.map((p) => (typeof p === "string" ? p : (p as { text?: string }).text ?? "")).join("") : "";
+
+/**
+ * Run a LangChain fallback chain: try each model in order until one returns non-empty text.
+ * (Equivalent to `model.withFallbacks()`, but records which provider answered for the audit log.)
+ */
+export async function runChain(models: { name: string; model: BaseChatModel }[], messages: BaseMessage[], timeoutMs = TIMEOUT_MS): Promise<LlmResult | null> {
+  for (const m of models) {
+    try {
+      const res = await m.model.invoke(messages, { signal: AbortSignal.timeout(timeoutMs) });
+      const text = textOf(res.content).trim();
+      if (text) return { text, provider: m.name };
+    } catch (e) {
+      console.warn(`[llm] ${m.name} failed:`, (e as Error).message?.slice(0, 200));
+    }
+  }
+  return null;
+}
+
 export function providerStatus() {
-  return PROVIDERS.map((p) => ({ name: p.name, configured: p.enabled(), vision: p.vision }));
+  return PROVIDERS.map((p) => ({ name: p.name, tier: p.tier, configured: p.enabled(), vision: p.vision }));
 }
 
 export function aiEnabled() {
@@ -165,15 +135,12 @@ export function aiEnabled() {
 
 /** Returns null when no provider is configured or all failed → caller uses its rules-engine fallback. */
 export async function llm(o: Opts): Promise<LlmResult | null> {
-  for (const p of PROVIDERS) {
-    if (!p.enabled() || (o.image && !p.vision)) continue;
-    try {
-      return await p.call(o);
-    } catch (e) {
-      console.warn(`[llm] ${p.name} failed:`, (e as Error).message);
-    }
-  }
-  return null;
+  const cfg = { temperature: o.temperature ?? 0.4, maxTokens: o.maxTokens ?? 900, image: !!o.image, json: !!o.json };
+  const chain = PROVIDERS.filter((p) => p.enabled() && (!o.image || p.vision))
+    .map((p) => ({ name: `${p.name}/${p.label(cfg.image)}`, model: p.model(cfg) }));
+  if (!chain.length) return null;
+  const system = o.json ? `${o.system ?? ""}\nRespond with a single valid JSON object only — no prose, no code fences.`.trim() : o.system;
+  return runChain(chain, toLangChain({ system, messages: o.messages, image: o.image }));
 }
 
 export function extractJson<T>(text: string): T | null {

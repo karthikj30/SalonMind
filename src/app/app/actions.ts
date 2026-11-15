@@ -6,6 +6,7 @@ import { AGENTS } from "@/lib/agents/registry";
 import { createBooking, findOrCreateClient, logPastVisit, rescheduleBooking } from "@/lib/services/booking";
 import { issueInvoice } from "@/lib/services/invoicing";
 import { importClients } from "@/lib/services/clientsImport";
+import { encryptField } from "@/lib/security/crypto";
 import { receiveMessage } from "@/lib/agents/crm";
 import { computePayroll, screeningTurn } from "@/lib/agents/hr";
 import { generateLayout } from "@/lib/agents/platform";
@@ -94,7 +95,7 @@ export async function addClient(fd: FormData) {
   const { db, tenant } = await getTenantContext();
   const { error } = await db.from("clients").insert({
     tenant_id: tenant.id, name: s(fd, "name"), phone: s(fd, "phone").replace(/\s+/g, "") || null, email: s(fd, "email") || null,
-    language: s(fd, "language") || "en", notes: s(fd, "notes") || null, consent_marketing: fd.get("consent") === "on",
+    language: s(fd, "language") || "en", notes: encryptField(s(fd, "notes") || null), consent_marketing: fd.get("consent") === "on",
     birthday: s(fd, "birthday") || null, referred_by: s(fd, "referred_by") || null,
   });
   if (error) fail("/app/clients", error.message.includes("duplicate") ? "A client with this phone already exists" : error.message);
@@ -215,7 +216,7 @@ export async function addCandidate(fd: FormData) {
   const { db, tenant } = await getTenantContext();
   const { data, error } = await db.from("candidates").insert({
     tenant_id: tenant.id, job_id: s(fd, "job_id") || null, name: s(fd, "name"), phone: s(fd, "phone") || null, email: s(fd, "email") || null,
-    source: s(fd, "source") || "manual", resume_text: s(fd, "resume_text"),
+    source: s(fd, "source") || "manual", resume_text: encryptField(s(fd, "resume_text")),
   }).select("id").single();
   if (error) fail("/app/hr", error.message);
   await emit(db, tenant.id, "candidate.added", { candidate_id: data.id }, "human");

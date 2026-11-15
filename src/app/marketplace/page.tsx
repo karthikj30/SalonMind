@@ -5,6 +5,7 @@ import { fmtDateTime } from "@/lib/time";
 import { monogram } from "@/lib/ui/categories";
 import { Logo } from "@/components/Logo";
 import { SearchBox } from "./SearchBox";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Find a salon" };
@@ -30,10 +31,10 @@ export default async function Marketplace() {
         <div className="relative mx-auto max-w-5xl px-4 pb-10 pt-6">
           <nav className="mb-10 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2"><Logo className="h-8 w-8" /><span className="font-display text-lg font-semibold">SalonMind</span></Link>
-            <Link href="/signup" className="rounded-xl border border-white/25 bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20">List your salon →</Link>
+            <div className="flex items-center gap-1"><ThemeToggle className="text-onplum" /><Link href="/signup" className="rounded-xl border border-white/25 bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20">List your salon →</Link></div>
           </nav>
-          <h1 className="font-display text-3xl font-semibold sm:text-5xl">Find your next salon visit</h1>
-          <p className="mt-2 text-brand-100/80">Ask in plain language — English, हिंदी, தமிழ் … — or upload a photo of a look you love.</p>
+          <h1 className="animate-fade-up font-display text-3xl font-semibold sm:text-5xl">Find your next salon visit</h1>
+          <p className="mt-2 text-onplum/80">Ask in plain language — English, हिंदी, தமிழ் … — or upload a photo of a look you love.</p>
           <div className="mt-6"><SearchBox /></div>
         </div>
       </section>
@@ -41,9 +42,9 @@ export default async function Marketplace() {
         <section>
           <h2 className="mb-4 flex items-center gap-2 font-display text-2xl font-semibold text-brand-900"><Ticket className="h-5 w-5 text-rose-500" />Live deals across India</h2>
           {deals.length ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {deals.map((d) => (
-                <Link key={d.id} href={`/s/${d.tenants?.slug}`} className="group relative flex overflow-hidden rounded-2xl border border-brand-100 bg-white shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift">
+                <Link key={d.id} href={`/s/${d.tenants?.slug}`} className="group lift relative flex overflow-hidden rounded-2xl border border-brand-100 bg-surface shadow-soft">
                   <div className="flex w-20 shrink-0 flex-col items-center justify-center bg-rose-gold text-white">
                     {d.discount_pct > 0 ? <><span className="font-display text-2xl font-semibold">{d.discount_pct}%</span><span className="text-[10px] uppercase tracking-wider">off</span></> : <span className="px-1 text-center text-[10px] font-semibold uppercase tracking-wider">{KIND[d.kind] ?? "Deal"}</span>}
                   </div>
@@ -57,17 +58,17 @@ export default async function Marketplace() {
                 </Link>
               ))}
             </div>
-          ) : <p className="rounded-2xl border border-dashed border-brand-200 bg-white p-6 text-center text-sm text-brand-900/50">No live deals right now — each salon&apos;s Yield Agent publishes them as slots open up.</p>}
+          ) : <p className="rounded-2xl border border-dashed border-brand-200 bg-surface p-6 text-center text-sm text-brand-900/50">No live deals right now — each salon&apos;s Yield Agent publishes them as slots open up.</p>}
         </section>
         <section className="mt-12">
           <h2 className="mb-4 flex items-center gap-2 font-display text-2xl font-semibold text-brand-900"><Store className="h-5 w-5 text-brand-500" />Salons</h2>
           {salons.length ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="stagger grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {salons.map((s) => {
                 const m = monogram(s.name);
                 return (
-                  <Link key={s.id} href={`/s/${s.slug}`} className="group overflow-hidden rounded-2xl border border-brand-100 bg-white shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift">
-                    <div className={`relative h-24 bg-gradient-to-br ${m.gradient}`}><div className="salon-pattern absolute inset-0 opacity-40" /></div>
+                  <Link key={s.id} href={`/s/${s.slug}`} className="group lift overflow-hidden rounded-2xl border border-brand-100 bg-surface shadow-soft">
+                    <div className={`relative h-24 overflow-hidden bg-gradient-to-br ${m.gradient}`}><div className="salon-pattern absolute inset-0 opacity-40 transition-transform duration-700 group-hover:scale-110" /></div>
                     <div className="-mt-8 px-4 pb-4">
                       <span className={`grid h-14 w-14 place-items-center rounded-2xl border-4 border-white bg-gradient-to-br font-display text-lg font-semibold text-white shadow-soft ${m.gradient}`}>{m.initials}</span>
                       <p className="mt-2 font-semibold text-brand-900 group-hover:text-brand-600">{s.name}</p>
@@ -78,7 +79,7 @@ export default async function Marketplace() {
                 );
               })}
             </div>
-          ) : <p className="rounded-2xl border border-dashed border-brand-200 bg-white p-6 text-center text-sm text-brand-900/50">No salons listed yet.</p>}
+          ) : <p className="rounded-2xl border border-dashed border-brand-200 bg-surface p-6 text-center text-sm text-brand-900/50">No salons listed yet.</p>}
         </section>
       </div>
     </main>

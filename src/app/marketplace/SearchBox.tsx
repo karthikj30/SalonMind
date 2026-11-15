@@ -41,7 +41,7 @@ export function SearchBox() {
 
   return (
     <div>
-      <form onSubmit={search} className="flex flex-col gap-2 rounded-2xl bg-white p-2 shadow-lift sm:flex-row">
+      <form onSubmit={search} className="flex flex-col gap-2 rounded-2xl bg-surface p-2 shadow-lift sm:flex-row">
         <div className="flex flex-1 items-center gap-2 px-2">
           <Search className="h-5 w-5 shrink-0 text-brand-400" aria-hidden />
           <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="What are you looking for?" placeholder='e.g. "balayage under ₹3000 in Mumbai available this evening"' className="w-full bg-transparent py-2.5 text-sm text-brand-950 placeholder:text-brand-900/40 focus:outline-none" />
@@ -52,7 +52,7 @@ export function SearchBox() {
         </label>
         <button disabled={loading} className="rounded-xl bg-rose-gold px-5 py-2.5 text-sm font-medium text-white shadow-soft hover:brightness-110 disabled:opacity-60">{loading ? "Searching…" : "Search"}</button>
       </form>
-      <label className="mt-3 flex items-center gap-2 text-xs text-brand-100/90"><input type="checkbox" checked={advisor} onChange={(e) => setAdvisor(e.target.checked)} /> <Sparkles className="h-3.5 w-3.5 text-gold-300" />Style advisor: upload a selfie and get cuts that suit your face shape (analysed once, never stored)</label>
+      <label className="mt-3 flex items-center gap-2 text-xs text-onplum/90"><input type="checkbox" checked={advisor} onChange={(e) => setAdvisor(e.target.checked)} /> <Sparkles className="h-3.5 w-3.5 text-champ-300" />Style advisor: upload a selfie and get cuts that suit your face shape (analysed once, never stored)</label>
       <div className="mt-3 flex flex-wrap gap-2 text-xs">
         {CATS.map(([label, query]) => (
           <button key={label} type="button" onClick={() => setQ(query)} className="rounded-full border border-white/25 bg-white/10 px-3 py-1 text-white backdrop-blur hover:bg-white/20">{label}</button>
@@ -60,11 +60,11 @@ export function SearchBox() {
       </div>
       <div className="mt-2 flex flex-wrap gap-2 text-xs">
         {["Balayage under ₹3000 available this evening", "Men's haircut and beard tomorrow morning", "kal shaam facial 1500 ke andar"].map((s) => (
-          <button key={s} type="button" onClick={() => setQ(s)} className="rounded-full px-2 py-1 text-brand-100/70 underline decoration-dotted underline-offset-2 hover:text-white">{s}</button>
+          <button key={s} type="button" onClick={() => setQ(s)} className="rounded-full px-2 py-1 text-onplum/70 underline decoration-dotted underline-offset-2 hover:text-white">{s}</button>
         ))}
       </div>
       {data && (
-        <div className="mt-6 rounded-2xl bg-ivory-100 p-4 text-brand-950 shadow-lift">
+        <div className="mt-6 animate-fade-up rounded-2xl bg-ivory-100 p-4 text-brand-950 shadow-lift">
           {data.error && <p className="text-sm text-red-600">{data.error}</p>}
           {data.advice && (
             <div className="mb-3 rounded-xl border border-brand-100 bg-brand-50 p-3 text-sm">
@@ -76,7 +76,7 @@ export function SearchBox() {
           {data.results?.length === 0 && <p className="text-sm text-brand-900/55">No matching salons/slots. Try a broader query.</p>}
           <div className="space-y-3">
             {data.results?.map((r, i) => (
-              <div key={i} className="rounded-2xl border border-brand-100 bg-white p-4 shadow-soft">
+              <div key={i} className="rounded-2xl border border-brand-100 bg-surface p-4 shadow-soft">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div><Link href={`/s/${r.tenant.slug}`} className="font-semibold text-brand-900 hover:text-brand-600">{r.tenant.name}</Link><p className="flex items-center gap-1 text-xs text-brand-900/55"><MapPin className="h-3 w-3" />{r.tenant.city} · match {Math.round(r.similarity * 100)}%</p></div>
                   <div className="text-right"><p className="font-medium">{r.service.name}</p><p className="text-sm">{r.deal ? <><s className="text-brand-900/40">₹{r.service.base_price}</s> <b className="text-brand-700">₹{r.price}</b></> : <>₹{r.price}</>} <span className="text-xs text-brand-900/40">+GST · {r.service.duration_min}m</span></p></div>

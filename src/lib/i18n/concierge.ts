@@ -1,0 +1,174 @@
+/**
+ * Multilingual concierge for rules-engine mode (no LLM key): native-script replies, script-based language
+ * detection, and keyword intent understanding for English, Hindi, Marathi, Tamil, Telugu and Bengali.
+ * With an LLM configured the model writes the reply instead; these keep every language working for free.
+ */
+export type Lang = "en" | "hi" | "mr" | "ta" | "te" | "bn";
+export const REPLY_LANGS: Lang[] = ["en", "hi", "mr", "ta", "te", "bn"];
+
+type Key = "greeting" | "proposal" | "confirmed" | "declined" | "handoff" | "slots" | "noSlots" | "price" | "cancelled" | "notAvailable" | "noBooking" | "askDetails";
+
+const T: Record<Lang, Record<Key, string>> = {
+  en: {
+    greeting: "Namaste! Thanks for messaging {salon}. We offer: {list}. Tell me the service, date and time you'd like and I'll book it.",
+    proposal: "I can book {service} on {when} with {stylist} — {price} + GST.\nReply YES to confirm or NO to change.",
+    confirmed: "✅ Confirmed: {service} on {when} with {stylist}, {price} + GST. See you soon!",
+    declined: "No problem — I haven't booked anything. Tell me another day or time that suits you.",
+    handoff: "I'm sorry about this. A team member is taking over this chat and our manager will call you back within 2 hours.",
+    slots: "Open slots for {service} on {date}: {list}. Reply with a time to book.",
+    noSlots: "No open slots for {service} on {date}. Try another day?",
+    price: "{service} costs {price} (+18% GST), {mins} minutes.",
+    cancelled: "✅ Cancelled your booking on {when}.",
+    notAvailable: "{time} is not available for {service}.",
+    noBooking: "I couldn't find an upcoming booking to cancel.",
+    askDetails: "Which service, date and time would you like?",
+  },
+  hi: {
+    greeting: "नमस्ते! {salon} को संदेश भेजने के लिए धन्यवाद। हमारी सेवाएँ: {list}। आपको कौन-सी सेवा, किस दिन और किस समय चाहिए, बताइए — बुकिंग हो जाएगी।",
+    proposal: "{service} — {when}, {stylist} के साथ, {price} + GST उपलब्ध है।\nपुष्टि के लिए हाँ / YES लिखें, बदलने के लिए NO।",
+    confirmed: "✅ बुकिंग पक्की: {service}, {when}, {stylist} के साथ, {price} + GST। जल्द मिलते हैं!",
+    declined: "ठीक है — कुछ भी बुक नहीं किया गया। कोई दूसरा दिन या समय बताइए।",
+    handoff: "असुविधा के लिए खेद है। हमारी टीम का एक सदस्य अब यह चैट संभालेगा और मैनेजर 2 घंटे में आपको कॉल करेंगे।",
+    slots: "{date} को {service} के लिए खाली समय: {list}। बुक करने के लिए समय बताइए।",
+    noSlots: "{date} को {service} के लिए कोई समय खाली नहीं है। कोई दूसरा दिन बताइए।",
+    price: "{service}: {price} (+18% GST), {mins} मिनट।",
+    cancelled: "✅ आपकी {when} की बुकिंग रद्द कर दी गई है।",
+    notAvailable: "{time} पर {service} उपलब्ध नहीं है।",
+    noBooking: "रद्द करने के लिए कोई आने वाली बुकिंग नहीं मिली।",
+    askDetails: "आपको कौन-सी सेवा, किस दिन और किस समय चाहिए?",
+  },
+  mr: {
+    greeting: "नमस्कार! {salon} ला संदेश पाठवल्याबद्दल धन्यवाद. आमच्या सेवा: {list}. कोणती सेवा, कोणत्या दिवशी आणि किती वाजता हवी ते सांगा — बुकिंग होईल.",
+    proposal: "{service} — {when}, {stylist} सोबत, {price} + GST उपलब्ध आहे.\nनिश्चित करण्यासाठी हो / YES लिहा, बदलण्यासाठी NO.",
+    confirmed: "✅ बुकिंग निश्चित: {service}, {when}, {stylist} सोबत, {price} + GST. लवकरच भेटू!",
+    declined: "ठीक आहे — काहीही बुक केलेले नाही. दुसरा दिवस किंवा वेळ सांगा.",
+    handoff: "गैरसोयीबद्दल क्षमस्व. आमच्या टीमचा सदस्य आता ही चॅट हाताळेल आणि मॅनेजर 2 तासांत तुम्हाला कॉल करतील.",
+    slots: "{date} रोजी {service} साठी उपलब्ध वेळा: {list}. बुक करण्यासाठी वेळ सांगा.",
+    noSlots: "{date} रोजी {service} साठी वेळ उपलब्ध नाही. दुसरा दिवस सांगा.",
+    price: "{service}: {price} (+18% GST), {mins} मिनिटे.",
+    cancelled: "✅ तुमचे {when} चे बुकिंग रद्द केले आहे.",
+    notAvailable: "{time} ला {service} उपलब्ध नाही.",
+    noBooking: "रद्द करण्यासाठी कोणतेही आगामी बुकिंग सापडले नाही.",
+    askDetails: "तुम्हाला कोणती सेवा, कोणत्या दिवशी आणि किती वाजता हवी?",
+  },
+  ta: {
+    greeting: "வணக்கம்! {salon}-க்கு செய்தி அனுப்பியதற்கு நன்றி. எங்கள் சேவைகள்: {list}. எந்த சேவை, எந்த நாள், எந்த நேரம் வேண்டும் என்று சொல்லுங்கள் — முன்பதிவு செய்து தருகிறோம்.",
+    proposal: "{service} — {when}, {stylist} உடன், {price} + GST கிடைக்கிறது.\nஉறுதிப்படுத்த ஆம் / YES என அனுப்புங்கள், மாற்ற NO.",
+    confirmed: "✅ முன்பதிவு உறுதி: {service}, {when}, {stylist} உடன், {price} + GST. விரைவில் சந்திப்போம்!",
+    declined: "சரி — எதுவும் முன்பதிவு செய்யப்படவில்லை. வேறு நாள் அல்லது நேரத்தைச் சொல்லுங்கள்.",
+    handoff: "சிரமத்திற்கு வருந்துகிறோம். எங்கள் குழு உறுப்பினர் இந்த உரையாடலைத் தொடர்வார்; மேலாளர் 2 மணி நேரத்திற்குள் உங்களை அழைப்பார்.",
+    slots: "{date} அன்று {service}-க்கு காலியான நேரங்கள்: {list}. முன்பதிவு செய்ய நேரத்தைச் சொல்லுங்கள்.",
+    noSlots: "{date} அன்று {service}-க்கு நேரம் காலியில்லை. வேறு நாளைச் சொல்லுங்கள்.",
+    price: "{service}: {price} (+18% GST), {mins} நிமிடங்கள்.",
+    cancelled: "✅ உங்கள் {when} முன்பதிவு ரத்து செய்யப்பட்டது.",
+    notAvailable: "{time}-க்கு {service} கிடைக்கவில்லை.",
+    noBooking: "ரத்து செய்ய வரவிருக்கும் முன்பதிவு எதுவும் இல்லை.",
+    askDetails: "எந்த சேவை, எந்த நாள், எந்த நேரம் வேண்டும்?",
+  },
+  te: {
+    greeting: "నమస్కారం! {salon}కి సందేశం పంపినందుకు ధన్యవాదాలు. మా సేవలు: {list}. ఏ సేవ, ఏ రోజు, ఏ సమయం కావాలో చెప్పండి — బుకింగ్ చేస్తాము.",
+    proposal: "{service} — {when}, {stylist}తో, {price} + GST అందుబాటులో ఉంది.\nనిర్ధారించడానికి అవును / YES అని పంపండి, మార్చడానికి NO.",
+    confirmed: "✅ బుకింగ్ ఖరారైంది: {service}, {when}, {stylist}తో, {price} + GST. త్వరలో కలుద్దాం!",
+    declined: "సరే — ఏదీ బుక్ చేయలేదు. మరో రోజు లేదా సమయం చెప్పండి.",
+    handoff: "అసౌకర్యానికి క్షమించండి. మా బృంద సభ్యులు ఇప్పుడు ఈ చాట్‌ను చూసుకుంటారు; మేనేజర్ 2 గంటల్లో మీకు కాల్ చేస్తారు.",
+    slots: "{date}న {service}కి ఖాళీ సమయాలు: {list}. బుక్ చేయడానికి సమయం చెప్పండి.",
+    noSlots: "{date}న {service}కి ఖాళీ సమయం లేదు. మరో రోజు చెప్పండి.",
+    price: "{service}: {price} (+18% GST), {mins} నిమిషాలు.",
+    cancelled: "✅ మీ {when} బుకింగ్ రద్దు చేయబడింది.",
+    notAvailable: "{time}కి {service} అందుబాటులో లేదు.",
+    noBooking: "రద్దు చేయడానికి రాబోయే బుకింగ్ ఏదీ కనిపించలేదు.",
+    askDetails: "ఏ సేవ, ఏ రోజు, ఏ సమయం కావాలి?",
+  },
+  bn: {
+    greeting: "নমস্কার! {salon}-এ বার্তা পাঠানোর জন্য ধন্যবাদ। আমাদের পরিষেবা: {list}। কোন পরিষেবা, কোন দিন এবং কোন সময় চান জানান — বুকিং করে দেব।",
+    proposal: "{service} — {when}, {stylist}-এর সাথে, {price} + GST পাওয়া যাচ্ছে।\nনিশ্চিত করতে হ্যাঁ / YES লিখুন, বদলাতে NO।",
+    confirmed: "✅ বুকিং নিশ্চিত: {service}, {when}, {stylist}-এর সাথে, {price} + GST। শীঘ্রই দেখা হবে!",
+    declined: "ঠিক আছে — কিছুই বুক করা হয়নি। অন্য দিন বা সময় জানান।",
+    handoff: "অসুবিধার জন্য দুঃখিত। আমাদের টিমের একজন সদস্য এখন এই চ্যাটটি দেখবেন এবং ম্যানেজার ২ ঘণ্টার মধ্যে আপনাকে ফোন করবেন।",
+    slots: "{date} তারিখে {service}-এর জন্য খালি সময়: {list}। বুক করতে সময় জানান।",
+    noSlots: "{date} তারিখে {service}-এর জন্য কোনো সময় খালি নেই। অন্য দিন জানান।",
+    price: "{service}: {price} (+18% GST), {mins} মিনিট।",
+    cancelled: "✅ আপনার {when}-এর বুকিং বাতিল করা হয়েছে।",
+    notAvailable: "{time}-এ {service} পাওয়া যাচ্ছে না।",
+    noBooking: "বাতিল করার মতো কোনো আসন্ন বুকিং পাওয়া যায়নি।",
+    askDetails: "কোন পরিষেবা, কোন দিন এবং কোন সময় চান?",
+  },
+};
+
+export function reply(lang: string | null | undefined, key: Key, vars: Record<string, string | number> = {}) {
+  const l = (REPLY_LANGS as string[]).includes(lang ?? "") ? (lang as Lang) : "en";
+  return T[l][key].replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ""));
+}
+
+/** Detect language from Unicode script. Devanagari is Hindi unless Marathi markers are present. */
+export function detectLang(text: string, hint?: string | null): Lang {
+  if (/[஀-௿]/.test(text)) return "ta";
+  if (/[ఀ-౿]/.test(text)) return "te";
+  if (/[ঀ-৿]/.test(text)) return "bn";
+  if (/[ऀ-ॿ]/.test(text)) return hint === "mr" || /(आहे|आहेत|उद्या|हवी|हवा|करायचे|किंमत|मला|तुम्ही)/.test(text) ? "mr" : "hi";
+  return (REPLY_LANGS as string[]).includes(hint ?? "") ? (hint as Lang) : "en";
+}
+
+const KW = {
+  yes: /^\s*(yes|y|ok|okay|confirm|confirmed|1|haan|ha|han|ho|हाँ|हां|हा|हो|ஆம்|சரி|అవును|సరే|হ্যাঁ|হ্যা)(?=$|[\s.!,])/i,
+  no: /^\s*(no|n|nahi|nahin|2|नहीं|नको|இல்லை|వద్దు|లేదు|না)(?=$|[\s.!,])/i,
+  book: /(book|booking|appointment|slot|reserve|बुक|बुकिंग|अपॉइंटमेंट|முன்பதிவு|புக்|బుక్|బుకింగ్|বুক|বুকিং)/i,
+  price: /\b(price|cost|rate|rates|charges?|how much|kitna|kitne)\b|कितना|कितने|दाम|कीमत|किंमत|விலை|எவ்வளவு|ధర|ఎంత|দাম|কত/i,
+  avail: /\b(available|availability|free|open|timings?|slots?)\b|खाली|उपलब्ध|காலி|நேரம்|ఖాళీ|సమయం|খালি|সময়/i,
+  cancel: /\b(cancel|radd)\b|रद्द|ரத்து|రద్దు|বাতিল/i,
+  complaint: /\b(bad|worst|complain|complaint|rude|refund)\b|शिकायत|खराब|बेकार|மோசம்|புகார்|చెడ్డ|ఫిర్యాదు|খারাপ|অভিযোগ/i,
+  greet: /\b(hi|hello|namaste|hey|vanakkam|namaskar)\b|नमस्ते|नमस्कार|வணக்கம்|నమస్కారం|నమస్తే|নমস্কার/i,
+  tomorrow: /\b(tomorrow|kal)\b|कल|उद्या|நாளை|రేపు|আগামীকাল|কাল/i,
+  today: /\b(today|aaj)\b|आज|இன்று|ఈరోజు|ఈ రోజు|আজ/i,
+};
+
+/** Words for common service categories in Indian languages → English category/name keywords. */
+const SERVICE_WORDS: [RegExp, string[]][] = [
+  [/haircut|hair cut|बाल|हेयरकट|हेअरकट|முடி|ஹேர்கட்|హెయిర్|జుట్టు|চুল|হেয়ারকাট/i, ["haircut", "hair", "grooming"]],
+  [/facial|फेशियल|फेसियल|ஃபேஷியல்|ఫేషియల్|ফেসিয়াল|ফেশিয়াল/i, ["facial", "skin"]],
+  [/colou?r|balayage|highlights|कलर|रंग|கலர்|కలర్|কালার|রং/i, ["colour", "balayage", "color"]],
+  [/manicure|pedicure|nail|नाखून|नेल|நகம்|గోళ్ళు|నెయిల్|নখ|নেইল/i, ["nails", "manicure", "nail"]],
+  [/bridal|makeup|मेकअप|दुल्हन|மேக்கப்|மணப்பெண்|మేకప్|মেকআপ|কনে/i, ["bridal", "makeup"]],
+  [/beard|shave|दाढ़ी|दाढी|தாடி|గడ్డం|দাড়ি/i, ["beard", "grooming"]],
+  [/spa|massage|मसाज|स्पा|மசாஜ்|మసాజ్|ম্যাসাজ/i, ["spa", "massage"]],
+];
+
+export function matchService<T extends { name: string; category: string }>(text: string, services: T[]): T | undefined {
+  const s = text.toLowerCase();
+  const direct = services.find((x) => s.includes(x.name.toLowerCase()) || s.includes(x.category.toLowerCase()));
+  if (direct) return direct;
+  for (const [re, keys] of SERVICE_WORDS) {
+    if (!re.test(text)) continue;
+    const hit = services.find((x) => keys.some((k) => x.name.toLowerCase().includes(k) || x.category.toLowerCase() === k));
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+export type RuleIntent = { language: Lang; intent: "book" | "availability" | "price" | "cancel" | "complaint" | "greeting" | "other"; dayOffset: 0 | 1 | null; time: string | null };
+
+/** Keyword + time parsing across scripts: "11am", "6 baje", "6 बजे", "6 மணிக்கு", "6 గంటలకు", "৬টায়". */
+export function ruleIntent(text: string, langHint?: string | null): RuleIntent {
+  const s = text.toLowerCase();
+  const language = detectLang(text, langHint);
+  const intent: RuleIntent["intent"] = KW.cancel.test(s) ? "cancel" : KW.complaint.test(s) ? "complaint" : KW.book.test(s) ? "book"
+    : KW.price.test(s) ? "price" : KW.avail.test(s) ? "availability" : KW.greet.test(s) ? "greeting" : "other";
+  const dayOffset = KW.tomorrow.test(s) ? 1 : KW.today.test(s) ? 0 : null;
+  const ascii = text.replace(/[০-৯]/g, (d) => String("০১২৩৪৫৬৭৮৯".indexOf(d))).replace(/[०-९]/g, (d) => String("०१२३४५६७८९".indexOf(d)));
+  let time: string | null = null;
+  const ampm = ascii.toLowerCase().match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/);
+  const local = ascii.match(/(\d{1,2})(?::(\d{2}))?\s*(baje|बजे|वाजता|மணிக்கு|மணி|గంటలకు|గంటకు|টায়|টা)/i);
+  if (ampm) {
+    let h = Number(ampm[1]); if (ampm[3] === "pm" && h < 12) h += 12; if (ampm[3] === "am" && h === 12) h = 0;
+    time = `${String(h).padStart(2, "0")}:${ampm[2] ?? "00"}`;
+  } else if (local) {
+    let h = Number(local[1]);
+    if (h >= 1 && h <= 8) h += 12; // "6 baje" at a salon means 6 pm
+    if (/shaam|शाम|संध्याकाळ|மாலை|సాయంత్రం|সন্ধ্যা/i.test(text) && h < 12) h += 12;
+    time = `${String(h).padStart(2, "0")}:${local[2] ?? "00"}`;
+  }
+  return { language, intent, dayOffset, time };
+}
+
+export const isYes = (t: string) => KW.yes.test(t);
+export const isNo = (t: string) => KW.no.test(t);

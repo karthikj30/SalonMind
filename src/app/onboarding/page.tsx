@@ -11,7 +11,7 @@ export default async function Onboarding({ searchParams }: { searchParams: Promi
   return (
     <AuthShell title="Set up your salon" subtitle="Each salon is an isolated workspace. You can add more branches later.">
       <Flash error={sp.error} />
-      <form action={createSalon} className="grid gap-4 rounded-2xl border border-brand-100 bg-white p-6 shadow-soft sm:grid-cols-2">
+      <form action={createSalon} className="grid gap-4 rounded-2xl border border-brand-100 bg-surface p-6 shadow-soft sm:grid-cols-2">
         <Field label="Salon name" className="sm:col-span-2"><Input name="name" required placeholder="e.g. Glow Studio Bandra" /></Field>
         <Field label="City"><Input name="city" required placeholder="Mumbai" /></Field>
         <Field label="State (GST)">

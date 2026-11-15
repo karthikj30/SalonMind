@@ -12,7 +12,7 @@ export default async function Invoice({ params }: { params: Promise<{ id: string
   if (!inv) notFound();
   const sp = inv.splits ?? {};
   return (
-    <div className="mx-auto max-w-3xl rounded-xl border bg-white p-8 shadow-sm">
+    <div className="mx-auto max-w-3xl rounded-xl border bg-surface p-8 shadow-sm">
       <div className="flex justify-between">
         <div><h1 className="text-xl font-bold">{tenant.name}</h1><p className="text-xs text-brand-900/55">{tenant.address}<br />{tenant.city}, {tenant.state} · GSTIN {tenant.gstin ?? "—"}</p></div>
         <div className="text-right text-sm"><p className="font-semibold">TAX INVOICE</p><p className="font-mono">{inv.number}</p><p>{fmtDate(inv.invoice_date)}</p></div>

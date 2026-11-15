@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Staff } from "../domain/types";
 import { payrollLine } from "../domain/payroll";
 import { statutory } from "../domain/statutory";
+import { decryptField } from "../security/crypto";
 import { llm, llmJson, extractJson } from "../ai/llm";
 import { istDate, timeToMin } from "../time";
 
@@ -59,8 +60,8 @@ export const recruiterAgent: AgentDef = {
     const job = c.job_postings ?? { title: "Stylist", description: "", role: "stylist" };
     const r = await llmJson<{ score: number; summary: string; strengths: string[]; gaps: string[] }>({
       system: "You screen salon job candidates in India. Return JSON {score 0-100, summary (2 sentences), strengths[], gaps[]}. Be fair; ignore gender, religion, caste, age, marital status.",
-      messages: [{ role: "user", content: `Job: ${job.title} — ${job.description}\nResume:\n${(c.resume_text ?? "").slice(0, 6000)}` }],
-    }, () => ruleScreen(c.resume_text ?? "", job));
+      messages: [{ role: "user", content: `Job: ${job.title} — ${job.description}\nResume:\n${(decryptField(c.resume_text) ?? "").slice(0, 6000)}` }],
+    }, () => ruleScreen(decryptField(c.resume_text) ?? "", job));
     const score = Math.max(0, Math.min(100, Math.round(Number(r.data.score))));
     const status = score >= 70 ? "shortlisted" : score < 40 ? "rejected" : "screening";
     const chat = status === "rejected" ? [] : [{ from: "agent", text: `Hi ${c.name}! Thanks for applying for ${job.title} at ${tenant.name}. A few quick questions. ${SCREEN_QUESTIONS[0]}` }];

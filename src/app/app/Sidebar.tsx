@@ -24,15 +24,15 @@ export function Sidebar({ salon, footer }: { salon: string; footer: React.ReactN
     <nav className="flex-1 space-y-3.5 overflow-y-auto px-3 py-3 [scrollbar-width:thin]" aria-label="Main">
       {GROUPS.map((g) => (
         <div key={g.label}>
-          <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-gold-300/70">{g.label}</p>
+          <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-champ-300/70">{g.label}</p>
           <ul className="space-y-0.5">
             {g.items.map(([href, label, Icon]) => {
               const active = href === "/app" ? path === "/app" : path.startsWith(href);
               return (
                 <li key={href}>
                   <Link href={href} aria-current={active ? "page" : undefined}
-                    className={`group flex items-center gap-3 rounded-xl px-3 py-1.5 text-sm transition ${active ? "bg-white/15 font-medium text-white shadow-[inset_2px_0_0_#dcb860]" : "text-brand-100/75 hover:bg-white/5 hover:text-white"}`}>
-                    <Icon className={`h-4 w-4 shrink-0 ${active ? "text-gold-300" : "text-brand-200/60 group-hover:text-gold-300"}`} aria-hidden />
+                    className={`group flex items-center gap-3 rounded-xl px-3 py-1.5 text-sm transition-all duration-200 hover:translate-x-0.5 ${active ? "bg-white/15 font-medium text-white shadow-[inset_2px_0_0_#dcb860]" : "text-onplum/75 hover:bg-white/5 hover:text-white"}`}>
+                    <Icon className={`h-4 w-4 shrink-0 transition-transform duration-200 group-hover:scale-110 ${active ? "text-champ-300" : "text-onplum-muted/60 group-hover:text-champ-300"}`} aria-hidden />
                     {label}
                   </Link>
                 </li>
@@ -46,12 +46,12 @@ export function Sidebar({ salon, footer }: { salon: string; footer: React.ReactN
   const panel = (
     <div className="flex h-full flex-col bg-plum-gradient text-white">
       <div className="px-5 pb-3 pt-4">
-        <Link href="/app" className="flex items-center gap-2.5"><Logo className="h-9 w-9" /><span className="font-display text-xl font-semibold">SalonMind</span></Link>
-        <p className="mt-2.5 truncate rounded-lg bg-white/10 px-3 py-1.5 text-xs text-brand-100/85" title={salon}>✦ {salon}</p>
+        <Link href="/app" className="group flex items-center gap-2.5"><Logo className="h-9 w-9 transition-transform duration-500 group-hover:rotate-[-8deg] group-hover:scale-110" /><span className="font-display text-xl font-semibold">SalonMind</span></Link>
+        <p className="mt-2.5 truncate rounded-lg bg-white/10 px-3 py-1.5 text-xs text-onplum/85" title={salon}>✦ {salon}</p>
       </div>
       <div className="gold-rule mx-5 opacity-40" />
       {nav}
-      <div className="border-t border-white/10 px-4 py-3 text-xs text-brand-100/70">{footer}</div>
+      <div className="border-t border-white/10 px-4 py-3 text-xs text-onplum/70">{footer}</div>
     </div>
   );
   return (
@@ -63,8 +63,8 @@ export function Sidebar({ salon, footer }: { salon: string; footer: React.ReactN
       <aside className="no-print sticky top-0 hidden h-screen w-64 shrink-0 md:block">{panel}</aside>
       {open && (
         <div className="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true">
-          <button className="absolute inset-0 bg-brand-950/50 backdrop-blur-sm" onClick={() => setOpen(false)} aria-label="Close menu" />
-          <div className="absolute inset-y-0 left-0 w-72 animate-fade-in shadow-lift">
+          <button className="absolute inset-0 animate-fade-in bg-black/50 backdrop-blur-sm" onClick={() => setOpen(false)} aria-label="Close menu" />
+          <div className="absolute inset-y-0 left-0 w-72 animate-slide-in-left shadow-lift">
             <button onClick={() => setOpen(false)} className="absolute right-3 top-4 z-10 rounded-lg p-1.5 text-white hover:bg-white/10" aria-label="Close menu"><X className="h-5 w-5" /></button>
             {panel}
           </div>

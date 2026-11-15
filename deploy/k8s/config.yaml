@@ -1,0 +1,11 @@
+# Non-secret configuration shared by all SalonMind services.
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: salonmind-config, namespace: salonmind }
+data:
+  NEXT_PUBLIC_SUPABASE_URL: "https://YOUR-REF.supabase.co"
+  AGENT_BOT_EMAIL: "agents@salonmind.app"
+  # web tier publishes events; the agent-worker microservice consumes them asynchronously
+  AGENT_EXECUTION: "worker"
+  WORKER_POLL_MS: "3000"
+  WORKER_TENANT_CONCURRENCY: "4"

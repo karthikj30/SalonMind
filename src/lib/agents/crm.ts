@@ -3,6 +3,7 @@ import type { AgentDef, Tenant } from "./types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { churnRisk, lexiconSentiment, visitCycle } from "../domain/crm";
 import { daysToBirthday } from "../domain/loyalty";
+import { detectLang, isNo as i18nIsNo, isYes as i18nIsYes, matchService, reply as tr, REPLY_LANGS, ruleIntent as i18nRuleIntent } from "../i18n/concierge";
 import { LANGUAGES, llmJson, llmText } from "../ai/llm";
 import { sendMessage } from "../services/messaging";
 import { createBooking, findOrCreateClient, planBooking } from "../services/booking";
@@ -148,19 +149,6 @@ export const retentionAgent: AgentDef = {
 
 type Intent = { language: string; intent: "book" | "availability" | "price" | "cancel" | "reschedule" | "complaint" | "faq" | "greeting" | "other"; service: string | null; date: string | null; time: string | null; name: string | null };
 
-function ruleIntent(text: string): Intent {
-  const s = text.toLowerCase();
-  const devanagari = /[ऀ-ॿ]/.test(text);
-  const intent: Intent["intent"] = /\b(cancel|radd)\b/.test(s) ? "cancel" : /\b(book|appointment|slot|reserve)\b/.test(s) ? "book"
-    : /\b(price|cost|rate|rates|kitna|kitne|charges?|how much)\b/.test(s) ? "price" : /\b(available|availability|free|open|timings?|slots?)\b/.test(s) ? "availability"
-    : /\b(bad|worst|complain|rude|refund)\b/.test(s) ? "complaint" : /\b(hi|hello|namaste|hey)\b/.test(s) ? "greeting" : "other";
-  const today = todayIst();
-  const date = /\btomorrow|kal\b/.test(s) ? addDays(today, 1) : /\btoday|aaj\b/.test(s) ? today : null;
-  const t = s.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/);
-  let time: string | null = null;
-  if (t) { let h = Number(t[1]); if (t[3] === "pm" && h < 12) h += 12; if (t[3] === "am" && h === 12) h = 0; time = `${String(h).padStart(2, "0")}:${t[2] ?? "00"}`; }
-  return { language: devanagari ? "hi" : "en", intent, service: null, date, time, name: null };
-}
 
 /**
  * Module 2 — Unified communications: one AI customer-service representative for WhatsApp, Instagram DMs,
@@ -188,8 +176,10 @@ export const conciergeAgent: AgentDef = {
     if (convo?.status === "human") {
       return { summary: `[${msg.channel}] ${handle}: human is handling this conversation (${convo.reason ?? "escalated"}) — AI did not reply.`, actions: [{ type: "handoff", label: `Awaiting staff reply to ${handle}` }] };
     }
-    const isYes = /^\s*(yes|y|haan|ha|han|ok|okay|confirm|confirmed|1|ஆம்|అవును|হ্যাঁ|हाँ|हां)\b/i.test(msg.body);
-    const isNo = /^\s*(no|n|nahi|nahin|cancel it|2|नहीं)\b/i.test(msg.body);
+    const isYes = i18nIsYes(msg.body);
+    const isNo = i18nIsNo(msg.body);
+    // reply language: the client's saved preference, else detected from the message script
+    const rl = client?.language && (REPLY_LANGS as string[]).includes(client.language) ? client.language : detectLang(msg.body);
 
     // Two-phase booking (Kontor pattern): a pending proposal holds frozen arguments; only an explicit YES executes it.
     if (isYes || isNo) {
@@ -197,21 +187,22 @@ export const conciergeAgent: AgentDef = {
         .eq("status", "pending").gt("expires_at", new Date().toISOString()).order("created_at", { ascending: false }).limit(1).maybeSingle();
       if (prop && isNo) {
         await db.from("booking_proposals").update({ status: "superseded" }).eq("id", prop.id);
-        await sendMessage(db, { tenant_id: tenant.id, client_id: prop.client_id, contact_handle: handle, phone: client?.phone, channel: msg.channel, body: "No problem — I haven't booked anything. Tell me another day or time that suits you.", agent: "concierge", meta: { intent: "proposal_declined" } });
+        await sendMessage(db, { tenant_id: tenant.id, client_id: prop.client_id, contact_handle: handle, phone: client?.phone, channel: msg.channel, body: tr(rl, "declined"), agent: "concierge", meta: { intent: "proposal_declined" } });
         return { summary: `[${msg.channel}] proposal declined by customer — nothing booked.` };
       }
       if (prop && isYes) {
         try {
           const r = await createBooking(db, tenant, { client_id: prop.client_id, service_id: prop.service_id, date: prop.date, time: prop.time.slice(0, 5), source: msg.channel });
           await db.from("booking_proposals").update({ status: "confirmed", booking_id: r.booking.id }).eq("id", prop.id);
-          const body = `✅ Confirmed: ${r.service.name} on ${fmtDateTime(r.booking.start_at)} with ${r.slot.staff.name}, ${inr(r.booking.price)} + GST. See you soon!`;
+          const body = tr(rl, "confirmed", { service: r.service.name, when: fmtDateTime(r.booking.start_at), stylist: r.slot.staff.name, price: inr(r.booking.price) });
           await sendMessage(db, { tenant_id: tenant.id, client_id: prop.client_id, contact_handle: handle, phone: client?.phone, channel: msg.channel, body, agent: "concierge", meta: { intent: "proposal_confirmed" } });
           return { summary: `[${msg.channel}] customer confirmed proposal → booked ${r.service.name} ${fmtDateTime(r.booking.start_at)}.`, actions: [{ type: "booking", label: `Booked ${r.service.name} at ${fmtDateTime(r.booking.start_at)} (customer confirmed)`, ref: r.booking.id }] };
         } catch (e) {
           await db.from("booking_proposals").update({ status: "failed" }).eq("id", prop.id);
           const plan = await planBooking(db, tenant, { service_id: prop.service_id, date: prop.date }, 3).catch(() => null);
-          const alt = plan?.slots.length ? ` Free now: ${plan.slots.map((x) => toIst(x.start).time).join(", ")}.` : "";
-          await sendMessage(db, { tenant_id: tenant.id, client_id: prop.client_id, contact_handle: handle, phone: client?.phone, channel: msg.channel, body: `Sorry, that slot was just taken by someone else.${alt} Which time would you like?`, agent: "concierge" });
+          const svcName = (prop.services as unknown as { name: string } | null)?.name ?? "";
+          const body = plan?.slots.length ? tr(rl, "slots", { service: svcName, date: prop.date, list: plan.slots.map((x) => toIst(x.start).time).join(", ") }) : tr(rl, "noSlots", { service: svcName, date: prop.date });
+          await sendMessage(db, { tenant_id: tenant.id, client_id: prop.client_id, contact_handle: handle, phone: client?.phone, channel: msg.channel, body: `${tr(rl, "notAvailable", { time: prop.time.slice(0, 5), service: svcName })} ${body}`, agent: "concierge" });
           return { summary: `Proposal could not be executed: ${(e as Error).message}` };
         }
       }
@@ -225,12 +216,12 @@ export const conciergeAgent: AgentDef = {
         try {
           const r = await createBooking(db, tenant, { client_id: client.id, service_id: offer.service_id, date: t.date, time: t.time, source: "waitlist" });
           await db.from("waitlist").update({ status: "booked", booking_id: r.booking.id }).eq("id", offer.id);
-          const body = `✅ Booked! ${r.service.name} on ${fmtDateTime(r.booking.start_at)} with ${r.slot.staff.name}, ${inr(r.booking.price)}. See you soon!`;
+          const body = tr(rl, "confirmed", { service: r.service.name, when: fmtDateTime(r.booking.start_at), stylist: r.slot.staff.name, price: inr(r.booking.price) });
           await sendMessage(db, { tenant_id: tenant.id, client_id: client.id, contact_handle: handle, phone: client.phone, channel: msg.channel, body, agent: "concierge", meta: { intent: "waitlist_accept" } });
           return { summary: `[${msg.channel}] ${client.name} accepted waitlist offer → booked ${fmtDateTime(r.booking.start_at)}.`, actions: [{ type: "booking", label: `Waitlist → booking for ${client.name}`, ref: r.booking.id }] };
         } catch (e) {
           await db.from("waitlist").update({ status: "waiting", offered_slot: null }).eq("id", offer.id);
-          await sendMessage(db, { tenant_id: tenant.id, client_id: client.id, contact_handle: handle, phone: client.phone, channel: msg.channel, body: `Sorry ${client.name}, that slot was just taken. You're still on our waitlist — we'll message you when the next one opens.`, agent: "concierge" });
+          await sendMessage(db, { tenant_id: tenant.id, client_id: client.id, contact_handle: handle, phone: client.phone, channel: msg.channel, body: tr(rl, "noSlots", { service: "", date: t.date }), agent: "concierge" });
           return { summary: `Waitlist offer for ${client.name} no longer available: ${(e as Error).message}` };
         }
       }
@@ -244,13 +235,18 @@ export const conciergeAgent: AgentDef = {
 Return JSON {language: ISO code of the customer's language (en, hi, ta, te, bn, mr, kn, ml, gu, pa), intent: one of book|availability|price|cancel|reschedule|complaint|faq|greeting|other, service: exact service name from the list or null, date: YYYY-MM-DD or null, time: HH:MM 24h or null, name: customer's name if they said it, else null}.`,
       messages: [{ role: "user", content: history || msg.body }],
       temperature: 0,
-    }, () => ruleIntent(msg.body));
+    }, () => {
+      const r = i18nRuleIntent(msg.body, client?.language);
+      return { language: r.language, intent: r.intent, service: matchService(msg.body, services ?? [])?.name ?? null, date: r.dayOffset === null ? null : addDays(todayIst(), r.dayOffset), time: r.time, name: null };
+    });
     const it = ex.data;
     const svc = (services ?? []).find((s) => it.service && s.name.toLowerCase() === it.service.toLowerCase())
-      ?? (services ?? []).find((s) => msg.body.toLowerCase().includes(s.name.toLowerCase()) || msg.body.toLowerCase().includes(s.category.toLowerCase()));
+      ?? matchService(msg.body, services ?? []);
+    const lng = (REPLY_LANGS as string[]).includes(it.language) ? it.language : rl;
 
     // Ground the reply in real data
-    const facts: string[] = [];
+    const facts: string[] = []; // grounding facts for the LLM
+    const rf: Parameters<typeof tr>[] = []; // the same facts as translatable templates (rules-engine reply)
     const actions = [];
     if ((it.intent === "book" || it.intent === "availability") && svc) {
       const date = it.date ?? today;
@@ -262,23 +258,26 @@ Return JSON {language: ISO code of the customer's language (en, hi, ta, te, bn, 
           await db.from("booking_proposals").update({ status: "superseded" }).eq("tenant_id", tenant.id).eq("contact_handle", handle).eq("status", "pending");
           const { data: prop } = await db.from("booking_proposals").insert({ tenant_id: tenant.id, client_id: client!.id, contact_handle: handle, service_id: svc.id, date, time: it.time, quoted_price: slot.quote.price }).select("id").single();
           facts.push(`PROPOSAL (not yet booked): ${svc.name} on ${fmtDateTime(slot.start)} with ${slot.staff.name}, price ${inr(slot.quote.price)} + GST. Ask the customer to reply YES to confirm or NO to change.`);
+          rf.push([lng, "proposal", { service: svc.name, when: fmtDateTime(slot.start), stylist: slot.staff.name, price: inr(slot.quote.price) }]);
           actions.push({ type: "proposal", label: `Proposed ${svc.name} ${fmtDateTime(slot.start)} to ${client!.name} — awaiting YES`, ref: prop?.id });
-        } else facts.push(`${it.time} on ${date} is not available for ${svc.name}.`);
+        } else { facts.push(`${it.time} on ${date} is not available for ${svc.name}.`); rf.push([lng, "notAvailable", { time: it.time, service: svc.name }]); }
       }
       if (!facts.some((f) => f.startsWith("PROPOSAL"))) {
         const plan = await planBooking(db, tenant, { service_id: svc.id, date }, 4).catch(() => null);
         facts.push(plan?.slots.length ? `Open slots for ${svc.name} on ${date}: ${plan.slots.map((s) => `${toIst(s.start).time} with ${s.staff.name} ${inr(s.quote.price)}`).join(", ")}.` : `No open slots for ${svc.name} on ${date}.`);
+        rf.push(plan?.slots.length ? [lng, "slots", { service: svc.name, date, list: plan.slots.map((s) => `${toIst(s.start).time} (${s.staff.name}, ${inr(s.quote.price)})`).join(", ") }] : [lng, "noSlots", { service: svc.name, date }]);
       }
     }
-    if (it.intent === "price" && svc) facts.push(`${svc.name} costs ${inr(svc.base_price)} (+18% GST), ${svc.duration_min} minutes.`);
+    if (it.intent === "price" && svc) { facts.push(`${svc.name} costs ${inr(svc.base_price)} (+18% GST), ${svc.duration_min} minutes.`); rf.push([lng, "price", { service: svc.name, price: inr(svc.base_price), mins: svc.duration_min }]); }
     if (it.intent === "cancel" && client) {
       const { data: next } = await db.from("bookings").select("id, start_at").eq("client_id", client.id).in("status", ["booked", "confirmed"]).gte("start_at", new Date().toISOString()).order("start_at").limit(1).maybeSingle();
       if (next) {
         await db.from("bookings").update({ status: "cancelled" }).eq("id", next.id);
         await db.from("agent_events").insert({ tenant_id: tenant.id, type: "booking.cancelled", payload: { booking_id: next.id }, source: "concierge" });
         facts.push(`CANCELLED booking on ${fmtDateTime(next.start_at)}.`);
+        rf.push([lng, "cancelled", { when: fmtDateTime(next.start_at) }]);
         actions.push({ type: "cancel", label: `Cancelled booking for ${client.name}`, ref: next.id });
-      } else facts.push("No upcoming booking found to cancel.");
+      } else { facts.push("No upcoming booking found to cancel."); rf.push([lng, "noBooking"]); }
     }
     const understood = !!svc || ["book", "availability", "price", "cancel", "reschedule", "greeting"].includes(it.intent);
     const unclear = understood ? 0 : (convo?.unclear_count ?? 0) + 1;
@@ -286,6 +285,7 @@ Return JSON {language: ISO code of the customer's language (en, hi, ta, te, bn, 
     await db.from("conversations").upsert({ tenant_id: tenant.id, contact_handle: handle, status: escalate ? "human" : "ai", reason: escalate, unclear_count: escalate ? 0 : unclear, updated_at: new Date().toISOString() });
     if (escalate) {
       facts.push("HANDOFF: apologise if needed and say a team member will take over this chat and the manager will call back within 2 hours.");
+      rf.push([lng, "handoff"]);
       actions.push({ type: "escalation", label: `⚠ Escalated ${handle} to staff (${escalate})` });
     }
 
@@ -293,10 +293,11 @@ Return JSON {language: ISO code of the customer's language (en, hi, ta, te, bn, 
       system: `You are the friendly AI receptionist of ${tenant.name} (${tenant.city ?? ""}), hours ${tenant.open_time.slice(0, 5)}–${tenant.close_time.slice(0, 5)}. Reply on ${msg.channel} in ${lang(it.language)} (use the customer's script). Max 70 words. Use ONLY these facts; never invent prices or slots. Services: ${catalogue}. Facts: ${facts.join(" ") || "none"}. If booking details are missing, ask for the missing service/date/time.`,
       messages: [{ role: "user", content: history || msg.body }],
       temperature: 0.5,
-    }, () => facts.length ? facts.map((f) => f.replace(/^CANCELLED: /, "✅ Cancelled: ").replace(/^PROPOSAL \(not yet booked\): (.*?) Ask the customer.*$/, "I can book $1\nReply YES to confirm or NO to change.").replace(/^HANDOFF: .*$/, "I'm sorry about this. A team member is taking over this chat and our manager will call you back within 2 hours.")).join("\n") + (facts.some((f) => f.startsWith("Open slots")) ? "\nReply with a time to book." : "")
-      : `Namaste! Thanks for messaging ${tenant.name}. ${catalogue ? "We offer: " + catalogue.split("; ").slice(0, 5).join(", ") + "." : ""} Tell me the service, date and time you'd like and I'll book it for you.`);
+    }, () => rf.length ? rf.map((a) => tr(...a)).join("\n")
+      : it.intent === "book" || it.intent === "availability" ? tr(lng, "askDetails")
+      : tr(lng, "greeting", { salon: tenant.name, list: (services ?? []).slice(0, 5).map((x) => `${x.name} ${inr(x.base_price)}`).join(", ") }));
 
-    await sendMessage(db, { tenant_id: tenant.id, client_id: client?.id ?? null, contact_handle: handle, phone: client?.phone, channel: msg.channel, body: reply.text, agent: "concierge", meta: { intent: it.intent, language: it.language } });
+    await sendMessage(db, { tenant_id: tenant.id, client_id: client?.id ?? null, contact_handle: handle, phone: client?.phone, channel: msg.channel, body: reply.text, agent: "concierge", meta: { intent: it.intent, language: reply.provider === "rules-engine" ? lng : it.language } });
     if (client && !msg.client_id) await db.from("messages").update({ client_id: client.id }).eq("id", msg.id);
     return {
       summary: `[${msg.channel}] intent=${it.intent} lang=${it.language}${svc ? " service=" + svc.name : ""} → replied${actions.length ? " + " + actions.map((a) => a.type).join(", ") : ""}.`,

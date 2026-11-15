@@ -39,7 +39,10 @@ export async function runAgent(def: AgentDef, ctx: Ctx, event?: AgentEvent): Pro
  * Agents publish follow-up events (e.g. churn → client.at_risk → retention), which are picked up in the
  * next loop iteration. Bounded to keep serverless invocations short.
  */
-export async function processEvents(db: SupabaseClient, tenant: Tenant, maxEvents = 15, deadlineMs = 45_000) {
+export async function processEvents(db: SupabaseClient, tenant: Tenant, maxEvents = 15, deadlineMs = 45_000, opts: { fromWorker?: boolean } = {}) {
+  // In the Kubernetes topology (AGENT_EXECUTION=worker) the web tier only publishes events; the
+  // agent-worker microservice consumes them asynchronously. On serverless (default) we drain inline.
+  if (process.env.AGENT_EXECUTION === "worker" && !opts.fromWorker) return 0;
   const t0 = Date.now();
   let handled = 0;
   while (handled < maxEvents && Date.now() - t0 < deadlineMs) {

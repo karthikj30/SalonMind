@@ -41,22 +41,22 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const dateLabel = new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "long", day: "numeric", month: "long" });
   return (
     <>
-      <section className="relative mb-6 overflow-hidden rounded-3xl bg-plum-gradient p-6 text-white shadow-lift sm:p-8">
+      <section className="relative mb-6 overflow-hidden rounded-3xl bg-plum-gradient bg-[length:200%_200%] p-6 text-white shadow-lift animate-gradient-x sm:p-8">
         <div className="salon-pattern absolute inset-0 opacity-60" aria-hidden />
-        <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-gold-400/20 blur-3xl" aria-hidden />
+        <div className="absolute -right-16 -top-16 h-64 w-64 animate-float rounded-full bg-gold-400/20 blur-3xl" aria-hidden />
         <div className="relative flex flex-wrap items-end justify-between gap-6">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold-300">{dateLabel}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-champ-300">{dateLabel}</p>
             <h1 className="mt-2 font-display text-3xl font-semibold sm:text-4xl">{greeting()}, {tenant.name}</h1>
-            <p className="mt-2 max-w-xl text-sm text-brand-100/80">
+            <p className="mt-2 max-w-xl text-sm text-onplum/80">
               {live.length ? `${live.length} appointment${live.length === 1 ? "" : "s"} on the books today.` : "No appointments yet today."}
               {pendingMsgs ? ` ${pendingMsgs} conversation${pendingMsgs === 1 ? "" : "s"} waiting for a human.` : " Your agents are watching the inbox, stock and schedule."}
             </p>
-            {layout?.prompt && <p className="mt-2 text-xs text-gold-200/80">✨ Layout generated in AI Studio: “{layout.prompt}”</p>}
+            {layout?.prompt && <p className="mt-2 text-xs text-champ-200/80">✨ Layout generated in AI Studio: “{layout.prompt}”</p>}
           </div>
           <div className="flex flex-wrap gap-2">
             <form action={runAgentNow}><input type="hidden" name="agent" value="all" />
-              <SubmitButton pendingText="Agents working…" className="!bg-none !bg-gold-400 !text-brand-950 hover:!bg-gold-300"><Play className="h-4 w-4" />Run all agents now</SubmitButton>
+              <SubmitButton pendingText="Agents working…" className="!bg-none !bg-champ-400 !text-ink hover:!bg-champ-300"><Play className="h-4 w-4" />Run all agents now</SubmitButton>
             </form>
             <Link href="/app/bookings" className="inline-flex items-center gap-1.5 rounded-xl border border-white/25 bg-white/10 px-3.5 py-2 text-sm font-medium backdrop-blur hover:bg-white/20"><CalendarPlus className="h-4 w-4" />New booking</Link>
             <Link href="/app/inbox" className="inline-flex items-center gap-1.5 rounded-xl border border-white/25 bg-white/10 px-3.5 py-2 text-sm font-medium backdrop-blur hover:bg-white/20"><MessagesSquare className="h-4 w-4" />Inbox</Link>
@@ -66,7 +66,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       <Flash msg={sp.msg} error={sp.error} />
       {steps.some((s) => !s.ok) && (
         <Card title="Set up your salon" className="mb-6" icon={<Store className="h-4 w-4" />}>
-          <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <ol className="stagger grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {steps.map((s, i) => (
               <li key={i}>
                 <Link href={s.href} className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm transition hover:shadow-soft ${s.ok ? "border-emerald-200 bg-emerald-50/50 text-emerald-900" : "border-brand-100 bg-ivory-50 text-brand-900 hover:border-brand-300"}`}>

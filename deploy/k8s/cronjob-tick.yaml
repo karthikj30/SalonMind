@@ -1,0 +1,24 @@
+# Orchestrator heartbeat: runs every tenant's periodic agents (forecasts, campaigns, deals, GST…).
+apiVersion: batch/v1
+kind: CronJob
+metadata: { name: agents-tick, namespace: salonmind }
+spec:
+  schedule: "*/30 * * * *"
+  timeZone: "Asia/Kolkata"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext: { runAsNonRoot: true, runAsUser: 65532, seccompProfile: { type: RuntimeDefault } }
+          containers:
+            - name: tick
+              image: curlimages/curl:8.11.1
+              env: [{ name: CRON_SECRET, valueFrom: { secretKeyRef: { name: salonmind-secrets, key: CRON_SECRET } } }]
+              args: ["-fsS", "--max-time", "100", "-H", "Authorization: Bearer $(CRON_SECRET)", "http://web.salonmind.svc.cluster.local/api/agents/tick"]
+              securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }

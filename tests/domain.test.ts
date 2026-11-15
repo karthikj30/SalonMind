@@ -189,3 +189,48 @@ test("ICS feed is RFC 5545 shaped", () => {
   const ics = buildIcs("Asha · Glow", [{ uid: "b1", start: "2026-11-16T05:30:00Z", end: "2026-11-16T07:30:00Z", summary: "Balayage — Priya; VIP", location: "Colour bay" }]);
   assert.match(ics, /^BEGIN:VCALENDAR\r\n/); assert.match(ics, /DTSTART:20261116T053000Z/); assert.match(ics, /SUMMARY:Balayage — Priya\; VIP/); assert.match(ics, /END:VCALENDAR\r\n$/);
 });
+
+import { detectLang, ruleIntent as langIntent, reply as tr, matchService } from "../src/lib/i18n/concierge.ts";
+
+test("Multilingual rules engine: script detection, intent, day and time in 6 languages", () => {
+  const cases: [string, string, string, number | null, string | null][] = [
+    ["kal 6 baje haircut book kar do", "en", "book", 1, "18:00"],
+    ["कल शाम 6 बजे हेयरकट बुक करना है", "hi", "book", 1, "18:00"],
+    ["उद्या 6 वाजता हेअरकट बुक करायचे आहे", "mr", "book", 1, "18:00"],
+    ["நாளை 11 மணிக்கு ஃபேஷியல் புக் செய்ய வேண்டும்", "ta", "book", 1, "11:00"],
+    ["రేపు 5 గంటలకు హెయిర్ కట్ బుక్ చేయండి", "te", "book", 1, "17:00"],
+    ["আগামীকাল ৬টায় চুল কাটা বুক করতে চাই", "bn", "book", 1, "18:00"],
+  ];
+  for (const [msg, lang, intent, day, time] of cases) {
+    const r = langIntent(msg);
+    assert.deepEqual([r.language, r.intent, r.dayOffset, r.time], [lang, intent, day, time], msg);
+  }
+  assert.equal(langIntent("हेयरकट कितने का है?").intent, "price");
+  assert.equal(langIntent("ஃபேஷியல் விலை எவ்வளவு?").intent, "price");
+  assert.equal(detectLang("hello", "ta"), "ta", "falls back to the client's saved language");
+});
+
+test("Multilingual replies render in native script with values filled in", () => {
+  const v = { service: "Facial", when: "16 Nov, 11:00 am", stylist: "Asha", price: "₹900" };
+  assert.match(tr("ta", "proposal", v), /Facial — 16 Nov, 11:00 am, Asha உடன், ₹900 \+ GST/);
+  assert.match(tr("hi", "confirmed", v), /बुकिंग पक्की/);
+  assert.match(tr("bn", "handoff"), /ম্যানেজার/);
+  assert.match(tr("xx", "declined"), /No problem/, "unknown language falls back to English");
+  const services = [{ name: "Men's haircut & beard", category: "grooming" }, { name: "Classic facial", category: "skin" }];
+  assert.equal(matchService("চুল কাটা চাই", services)?.name, "Men's haircut & beard");
+  assert.equal(matchService("ஃபேஷியல் வேண்டும்", services)?.name, "Classic facial");
+});
+
+import { encryptField, decryptField, isEncrypted } from "../src/lib/security/crypto.ts";
+
+test("AES-256-GCM field encryption: round-trip, random IV, tamper detection", () => {
+  process.env.DATA_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
+  const a = encryptField("Allergic to ammonia; pregnant")!, b = encryptField("Allergic to ammonia; pregnant")!;
+  assert.ok(isEncrypted(a) && a !== b, "random IV → different ciphertexts");
+  assert.ok(!a.includes("ammonia"));
+  assert.equal(decryptField(a), "Allergic to ammonia; pregnant");
+  assert.equal(decryptField("plain legacy text"), "plain legacy text");
+  const tampered = a.slice(0, -4) + (a.at(-4) === "A" ? "B" : "A") + a.slice(-3);
+  assert.throws(() => decryptField(tampered), "GCM auth tag rejects tampering");
+  delete process.env.DATA_ENCRYPTION_KEY;
+});

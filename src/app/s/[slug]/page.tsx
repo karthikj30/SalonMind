@@ -12,6 +12,7 @@ import { SubmitButton } from "@/components/SubmitButton";
 import { upiLink } from "@/lib/domain/upi";
 import { qrSvg } from "@/lib/services/qr";
 import { category, monogram } from "@/lib/ui/categories";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { ArrowLeft, CheckCircle2, Clock, MapPin, Star, Ticket } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -59,12 +60,12 @@ export default async function SalonPage({ params, searchParams }: { params: Prom
       <header className={`relative bg-gradient-to-br ${m.gradient} text-white`}>
         <div className="salon-pattern absolute inset-0 opacity-50" aria-hidden />
         <div className="relative mx-auto max-w-5xl px-4 pb-16 pt-5">
-          <Link href="/marketplace" className="inline-flex items-center gap-1 text-sm text-white/80 hover:text-white"><ArrowLeft className="h-4 w-4" />Marketplace</Link>
+          <div className="flex items-center justify-between"><Link href="/marketplace" className="inline-flex items-center gap-1 text-sm text-white/80 hover:text-white"><ArrowLeft className="h-4 w-4" />Marketplace</Link><ThemeToggle className="text-white/85" /></div>
         </div>
       </header>
       <div className="relative z-10 mx-auto max-w-5xl px-4">
         <div className="-mt-12 flex flex-wrap items-start gap-x-5 gap-y-2">
-          <span className={`grid h-24 w-24 place-items-center rounded-3xl border-4 border-ivory-100 bg-gradient-to-br font-display text-3xl font-semibold text-white shadow-lift ${m.gradient}`}>{m.initials}</span>
+          <span className={`grid h-24 w-24 animate-scale-in place-items-center rounded-3xl border-4 border-ivory-100 bg-gradient-to-br font-display text-3xl font-semibold text-white shadow-lift ${m.gradient}`}>{m.initials}</span>
           <div className="sm:pt-14">
             <h1 className="font-display text-3xl font-semibold text-brand-900">{tenant.name}</h1>
             <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-brand-900/60">
@@ -82,7 +83,7 @@ export default async function SalonPage({ params, searchParams }: { params: Prom
             {Number(booked.deposit_required) > 0 ? <p className="mt-1 text-amber-800">To hold this slot, please pay a deposit of {inr(booked.deposit_required)} via UPI (the salon has sent details on WhatsApp).</p> : <p className="mt-1 text-emerald-800">A confirmation will be sent to you on WhatsApp.</p>}
             {payQr && (
               <div className="mt-4 flex flex-wrap items-center gap-5">
-                <div className="h-[180px] w-[180px] rounded-xl bg-white p-1 shadow-soft" dangerouslySetInnerHTML={{ __html: payQr.svg }} />
+                <div className="h-[180px] w-[180px] rounded-xl bg-[#fff] p-1 shadow-soft" dangerouslySetInnerHTML={{ __html: payQr.svg }} />
                 <div className="text-xs text-brand-900/70"><p>Scan with any UPI app, or on your phone:</p><a href={payQr.link} className="mt-2 inline-block rounded-xl bg-rose-gold px-4 py-2 font-medium text-white shadow-soft">Pay {inr(booked.deposit_required)} via UPI</a></div>
               </div>
             )}
@@ -97,9 +98,9 @@ export default async function SalonPage({ params, searchParams }: { params: Prom
             {[...grouped.entries()].map(([cat, list]) => {
               const c = category(cat); const Icon = c.icon;
               return (
-                <div key={cat} className="mb-6">
+                <div key={cat} className="mb-6 animate-fade-up">
                   <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-gold-700"><Icon className="h-4 w-4" />{c.label}</h3>
-                  <ul className="divide-y divide-brand-50 overflow-hidden rounded-2xl border border-brand-100 bg-white shadow-soft">
+                  <ul className="divide-y divide-brand-50 overflow-hidden rounded-2xl border border-brand-100 bg-surface shadow-soft">
                     {list.map((sv) => (
                       <li key={sv.id} className={`flex items-center justify-between gap-3 p-4 text-sm ${sv.id === serviceId ? "bg-brand-50/60" : ""}`}>
                         <div className="min-w-0"><p className="font-medium text-brand-900">{sv.name}</p>{sv.description && <p className="truncate text-xs text-brand-900/50">{sv.description}</p>}<p className="text-xs text-brand-900/45">{sv.duration_min} min</p></div>
@@ -112,7 +113,7 @@ export default async function SalonPage({ params, searchParams }: { params: Prom
             })}
           </section>
           <section id="book" className="lg:sticky lg:top-6 lg:self-start">
-            <div className="rounded-2xl border border-brand-100 bg-white p-5 shadow-lift">
+            <div className="rounded-2xl border border-brand-100 bg-surface p-5 shadow-lift">
               <h2 className="font-display text-xl font-semibold text-brand-900">Book</h2>
               {selected && <p className="text-xs text-brand-900/55">{selected.name} · {selected.duration_min} min</p>}
               <form className="mb-4 mt-3 grid grid-cols-[1fr_auto] gap-2 text-sm">
@@ -131,7 +132,7 @@ export default async function SalonPage({ params, searchParams }: { params: Prom
                         return (
                           <label key={tm} className="cursor-pointer">
                             <input type="radio" name="time" value={tm} defaultChecked={sp.time === tm} required className="peer sr-only" />
-                            <span className="block rounded-xl border border-brand-200 px-2 py-1.5 text-center text-xs transition peer-checked:border-brand-600 peer-checked:bg-rose-gold peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-brand-300 hover:border-brand-400">
+                            <span className="block rounded-xl border border-brand-200 px-2 py-1.5 text-center text-xs transition hover:-translate-y-0.5 peer-checked:scale-[1.03] peer-checked:border-brand-600 peer-checked:bg-rose-gold peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-brand-300 hover:border-brand-400">
                               <span className="block font-semibold">{tm}</span><span className="opacity-75">{inr(sl.quote.price)}</span>
                             </span>
                           </label>

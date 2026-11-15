@@ -3,9 +3,9 @@
 Every requirement in `docs/Salon_Management_System_RFP.pdf`, where it lives in the code, and the test
 that proves it. Three test layers:
 
-* **Unit** — `npm test` → `tests/domain.test.ts` (24 tests, pure business rules)
+* **Unit** — `npm test` → `tests/domain.test.ts` (27 tests, pure business rules)
 * **Integration (real Postgres, no mocks)** — `npm run test:integration` → `tests/integration/rfp.test.mts`
-  (32 tests; creates a throw-away salon through the same service functions the UI uses, runs the real
+  (37 tests; creates a throw-away salon through the same service functions the UI uses, runs the real
   agents, asserts on rows they wrote, deletes everything)
 * **E2E (real browser, real UI)** — `BASE_URL=… node tests/e2e.mjs` (signup → … → account deletion)
 
@@ -67,15 +67,20 @@ that proves it. Three test layers:
 | e-invoicing, CGST/SGST/IGST | `computeInvoice`, FY numbering, IRN-format reference | UNIT *GST* (3); INT *Checkout by booth renter…* |
 | ITC reconciliation + monthly return drafts | `gst` agent → GSTR-1 / GSTR-3B | UNIT *GSTR-3B uses ITC…*; INT *ITC: inter-state PO received…* |
 
-## §4 Technical specs
+## §4 Technical & cloud specifications — what the PDF names vs. what is built
 
-| Spec | How | Tests |
+| PDF spec | Built | Tests / evidence |
 |---|---|---|
-| Relational + vector DB | Postgres + pgvector `match_services` | INT *Intent search…* |
-| Unified LLM abstraction | `src/lib/ai/llm.ts` provider chain + rules fallback | every INT test runs in rules mode; `USE_LLM_IN_TESTS=1` runs them with your keys |
-| Multilingual (hi, ta, te, bn, mr …) | client `language` → prompts; Devanagari/Hinglish rules | INT *Unified inbox… Hinglish* |
-| Low-bandwidth mobile | Server components, ~107 kB first load, image downscaling before upload | build output |
-| Security & DPDP | RLS, least-privilege RPCs, consent, export, erasure, owner self-deletion | INT *Tenant isolation…*; E2E DPDP deletion |
+| Cloud-native **microservices** | `web` (Next.js) + `agent-worker` (event-bus consumer microservice) + `agents-tick` CronJob; Dockerfiles for both | INT *microservices* (web publishes, worker container consumes async) |
+| **Kubernetes (EKS/GKE)** orchestration | `deploy/k8s`: Deployments, Services, **HPA** (web 2→20, worker 1→10), PDB, CronJob, Ingress, Kustomize; GKE/EKS steps in `docs/DEPLOY_K8S.md` | images built + containers run here; live cluster not created (sandbox permission) |
+| **Serverless** for spikes | Vercel functions (default topology), `bom1` region | production deployment |
+| PostgreSQL for transactional data | Supabase Postgres, RLS, exclusion constraints | all INT tests |
+| **Vector DB (pgvector)** | `services.embedding vector(768)` + `match_services`; LangChain `Embeddings` (Gemini / local) | INT *Intent search…* |
+| LLMs (**OpenAI GPT, Anthropic Claude, Google Gemini**) via **LangChain** | `src/lib/ai/llm.ts` on **LangChain.js** `BaseChatModel`s: Gemini, OpenAI GPT, Claude, plus free Groq/OpenRouter/HF/Ollama; fallback chain + rules engine | every INT test (rules mode); `USE_LLM_IN_TESTS=1` with keys |
+| Multilingual conversational AI (**Hindi, Tamil, Telugu, Bengali, Marathi**…) | LLM replies in the customer's language; **native-script rules engine** for hi/mr/ta/te/bn/en (no key needed) | UNIT *Multilingual rules engine* (6 languages); INT *A customer books entirely in Tamil*, *Hindi price question* |
+| Low-bandwidth 4G/5G | Server components (~107 kB first load), image downscaling before upload, PWA | build output |
+| Extreme concurrency (festival peaks) | DB exclusion constraints, atomic event claiming, HPAs | INT *Festival rush: 20 simultaneous bookings → exactly one wins* |
+| **AES-256**, ISO 27001 / SOC 2 readiness, **DPDP** | AES-256-GCM field encryption, RLS, audit trail, consent/export/erasure — see `docs/SECURITY.md` | UNIT *AES-256-GCM…*; INT *Tenant isolation…*; E2E DPDP deletion |
 
 ## Added after market research (Zenoti, Fresha, Boulevard, MioSalon, Dingg, Zylu, SalonBoost, OpenSalon)
 

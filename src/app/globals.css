@@ -2,17 +2,45 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  body { @apply bg-ivory-100 text-brand-950 antialiased; }
-  h1, h2, h3 { @apply tracking-tight; }
-  /* Playfair defaults to old-style figures (0 looks like o) — use lining numerals for prices */
-  .font-display { font-variant-numeric: lining-nums; }
-  ::selection { @apply bg-rose-200 text-brand-900; }
-  input[type="checkbox"], input[type="radio"] { accent-color: #7e3f75; }
+/* ── Theme tokens (RGB channels so Tailwind opacity modifiers work) ── */
+:root {
+  color-scheme: light;
+  --brand-50: 250 245 249; --brand-100: 243 232 241; --brand-200: 231 209 227; --brand-300: 210 170 203; --brand-400: 183 122 171;
+  --brand-500: 154 85 144; --brand-600: 126 63 117; --brand-700: 102 50 95; --brand-800: 79 40 74; --brand-900: 59 30 56; --brand-950: 36 17 31;
+  --rose-50: 253 246 244; --rose-100: 251 233 228; --rose-200: 246 208 198; --rose-300: 238 175 157; --rose-400: 227 134 109; --rose-500: 212 105 79; --rose-600: 185 82 58; --rose-700: 148 64 46;
+  --gold-50: 252 248 238; --gold-100: 248 239 217; --gold-200: 240 220 174; --gold-300: 232 207 143; --gold-400: 220 184 96; --gold-500: 201 160 67; --gold-600: 168 129 46; --gold-700: 127 97 35;
+  --ivory-50: 255 253 250; --ivory-100: 251 248 244; --ivory-200: 245 239 231; --ivory-300: 235 226 214;
+  --surface: 255 255 255; --border: 234 217 230; --shadow: 59 30 56;
+}
+/* Dark: the plum scale is inverted (900 = light text, 50 = deep tint) and surfaces become aubergine. */
+.dark {
+  color-scheme: dark;
+  --brand-50: 44 24 42; --brand-100: 54 30 51; --brand-200: 76 42 71; --brand-300: 108 62 101; --brand-400: 150 104 142;
+  --brand-500: 184 139 176; --brand-600: 214 170 205; --brand-700: 226 194 220; --brand-800: 236 215 232; --brand-900: 246 234 243; --brand-950: 252 246 250;
+  --rose-50: 58 30 27; --rose-100: 74 37 32; --rose-200: 98 48 40; --rose-300: 140 70 56; --rose-400: 214 120 96; --rose-500: 230 135 110; --rose-600: 238 158 136; --rose-700: 244 182 164;
+  --gold-50: 46 36 18; --gold-100: 58 45 22; --gold-200: 84 65 30; --gold-300: 196 160 82; --gold-400: 220 184 96; --gold-500: 230 199 120; --gold-600: 236 210 140; --gold-700: 242 222 166;
+  --ivory-50: 30 18 32; --ivory-100: 22 13 24; --ivory-200: 38 23 41; --ivory-300: 48 30 51;
+  --surface: 33 20 35; --border: 66 40 63; --shadow: 0 0 0;
 }
 
+@layer base {
+  html { -webkit-tap-highlight-color: transparent; }
+  body { @apply bg-ivory-100 text-brand-950 antialiased transition-colors duration-300; }
+  h1, h2, h3 { @apply tracking-tight; }
+  ::selection { @apply bg-rose-200 text-brand-900; }
+  input[type="checkbox"], input[type="radio"] { accent-color: rgb(var(--brand-600)); }
+  /* Playfair defaults to old-style figures (0 looks like o) — use lining numerals for prices */
+  .font-display { font-variant-numeric: lining-nums; }
+  :focus-visible { outline: 2px solid rgb(var(--gold-400)); outline-offset: 2px; }
+  .dark ::-webkit-calendar-picker-indicator { filter: invert(.85); }
+}
+
+@keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* smooth cross-fade only while the user switches theme */
+.theme-switching, .theme-switching * { transition: background-color .3s ease, border-color .3s ease, color .2s ease !important; }
+
 @layer components {
-  /* subtle salon pattern (scissors-and-comb dots) for hero areas */
   .salon-pattern {
     background-image: radial-gradient(rgba(201,160,67,.18) 1px, transparent 1px), radial-gradient(rgba(201,160,67,.10) 1px, transparent 1px);
     background-size: 22px 22px, 22px 22px; background-position: 0 0, 11px 11px;
@@ -20,6 +48,22 @@
   .gold-rule { @apply h-px bg-gradient-to-r from-transparent via-gold-400 to-transparent; }
   .skeleton { @apply relative overflow-hidden rounded-xl bg-brand-100/60; }
   .skeleton::after { content: ""; @apply absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/60 to-transparent; animation: shimmer 1.4s infinite; }
+  /* staggered entrance for grids & lists */
+  .stagger > * { animation: fade-up .5s cubic-bezier(.2,.7,.2,1) both; }
+  .stagger > *:nth-child(1) { animation-delay: 30ms; } .stagger > *:nth-child(2) { animation-delay: 80ms; } .stagger > *:nth-child(3) { animation-delay: 130ms; }
+  .stagger > *:nth-child(4) { animation-delay: 180ms; } .stagger > *:nth-child(5) { animation-delay: 230ms; } .stagger > *:nth-child(6) { animation-delay: 280ms; }
+  .stagger > *:nth-child(7) { animation-delay: 330ms; } .stagger > *:nth-child(8) { animation-delay: 380ms; } .stagger > *:nth-child(n+9) { animation-delay: 420ms; }
+  /* animated gold text */
+  .text-shimmer { background: linear-gradient(90deg, #e8cf8f, #f6d0c6, #dcb860, #e8cf8f); background-size: 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: gradient-x 6s ease infinite; }
+  /* hover lift for cards */
+  .lift { @apply transition duration-300 will-change-transform hover:-translate-y-1 hover:shadow-lift; }
+  /* scroll reveal (toggled by <Reveal>) */
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1); }
+  .reveal.is-visible { opacity: 1; transform: none; }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  .reveal { opacity: 1; transform: none; }
+}
 @media print { .no-print { display: none !important; } body { background: white; } }

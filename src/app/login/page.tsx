@@ -11,7 +11,7 @@ export default async function Login({ searchParams }: { searchParams: Promise<Re
   return (
     <AuthShell title="Welcome back" subtitle="Log in to your salon's command centre.">
       <Flash error={sp.error} msg={sp.msg} />
-      <form action={signIn} className="space-y-4 rounded-2xl border border-brand-100 bg-white p-6 shadow-soft">
+      <form action={signIn} className="space-y-4 rounded-2xl border border-brand-100 bg-surface p-6 shadow-soft">
         <Field label="Email"><Input name="email" type="email" required autoComplete="email" /></Field>
         <Field label="Password"><Input name="password" type="password" required autoComplete="current-password" /></Field>
         <SubmitButton className="w-full !py-2.5">Log in</SubmitButton>

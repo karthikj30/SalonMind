@@ -1,4 +1,5 @@
 import "server-only";
+import { Embeddings } from "@langchain/core/embeddings";
 
 export const EMBED_DIM = 768;
 
@@ -32,32 +33,40 @@ export function localEmbed(text: string): number[] {
   return v.map((x) => x / mag);
 }
 
+/** LangChain `Embeddings` implementations so retrieval plugs into any LangChain vector-store / retriever. */
+export class LocalHashEmbeddings extends Embeddings {
+  constructor() { super({}); }
+  async embedDocuments(texts: string[]) { return texts.map(localEmbed); }
+  async embedQuery(text: string) { return localEmbed(text); }
+}
+
+/** Gemini `gemini-embedding-001` truncated to 768 dims (pgvector column size) via outputDimensionality. */
+export class GeminiEmbeddings extends Embeddings {
+  constructor(private apiKey: string) { super({ maxRetries: 1 }); }
+  async embedQuery(text: string) {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${this.apiKey}`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content: { parts: [{ text }] }, outputDimensionality: EMBED_DIM }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const values: number[] | undefined = (await res.json())?.embedding?.values;
+    if (!res.ok || values?.length !== EMBED_DIM) throw new Error(`gemini embedding failed (${res.status})`);
+    const mag = Math.sqrt(values.reduce((a, x) => a + x * x, 0)) || 1;
+    return values.map((x) => x / mag);
+  }
+  async embedDocuments(texts: string[]) { return Promise.all(texts.map((t) => this.embedQuery(t))); }
+}
+
 export async function embed(text: string): Promise<{ vector: number[]; model: string }> {
   const key = process.env.GEMINI_API_KEY;
   if (key) {
     try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${key}`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            content: { parts: [{ text }] },
-            outputDimensionality: EMBED_DIM,
-          }),
-        },
-      );
-      const data = await res.json();
-      const values: number[] | undefined = data?.embedding?.values;
-      if (res.ok && values?.length === EMBED_DIM) {
-        const mag = Math.sqrt(values.reduce((s, x) => s + x * x, 0)) || 1;
-        return { vector: values.map((x) => x / mag), model: "gemini-embedding-001@768" };
-      }
+      return { vector: await new GeminiEmbeddings(key).embedQuery(text), model: "gemini-embedding-001@768" };
     } catch (e) {
       console.warn("[embed] gemini failed", (e as Error).message);
     }
   }
-  return { vector: localEmbed(text), model: "local-hash-v1" };
+  return { vector: await new LocalHashEmbeddings().embedQuery(text), model: "local-hash-v1" };
 }
 
 export const toPgVector = (v: number[]) => `[${v.map((x) => x.toFixed(6)).join(",")}]`;

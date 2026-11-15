@@ -101,6 +101,19 @@ describe("Module 3 — scheduling, pricing, no-show", () => {
     assert.ok(roomErr && /no_room_overlap/.test(roomErr.message), roomErr?.message);
   });
 
+  test("Festival rush: 20 simultaneous bookings for one slot → exactly one wins, no double booking", async () => {
+    const date = addDays(today, 6);
+    const clients = await Promise.all(Array.from({ length: 20 }, (_, i) => findOrCreateClient(db, tenant.id, { name: `Rush ${i}`, phone: `+9197000000${String(i).padStart(2, "0")}` })));
+    const results = await Promise.allSettled(clients.map((c) => createBooking(db, tenant, { client_id: c.id, service_id: ids.balayage, date, time: "14:00", source: "marketplace" })));
+    const ok = results.filter((r) => r.status === "fulfilled");
+    assert.equal(ok.length, 1, `exactly one booking succeeds (got ${ok.length})`);
+    for (const r of results) if (r.status === "rejected") assert.match(String(r.reason?.message), /taken|No stylist/);
+    const { data } = await db.from("bookings").select("id").eq("tenant_id", tenant.id).eq("service_id", ids.balayage).gte("start_at", istDate(date, "00:00").toISOString()).lte("start_at", istDate(date, "23:59").toISOString()).in("status", ["booked", "confirmed"]);
+    assert.equal(data!.length, 1);
+    await db.from("bookings").update({ status: "cancelled" }).eq("id", data![0].id);
+    await db.from("agent_events").update({ status: "done" }).eq("tenant_id", tenant.id).eq("status", "pending");
+  });
+
   test("Staff leave blocks the scheduler", async () => {
     await ins("staff_time_off", { staff_id: ids.neha, start_at: istDate(tomorrow, "00:00").toISOString(), end_at: istDate(tomorrow, "23:59").toISOString(), reason: "sick" });
     const plan = await planBooking(db, tenant, { service_id: ids.facial, date: tomorrow }, 30);
@@ -313,6 +326,31 @@ describe("Module 2 — CRM, churn, unified inbox", () => {
     assert.equal((await db.from("booking_proposals").select("status").eq("contact_handle", "+919811100011").single()).data!.status, "confirmed");
     const { data: price } = await db.from("messages").select("body").eq("contact_handle", "@insta_meera").eq("direction", "out");
     assert.match(price![0].body, /900|facial/i);
+  });
+});
+
+describe("Multilingual conversational AI (RFP §4) — rules engine, no API key", () => {
+  test("A customer books entirely in Tamil: native-script proposal, 'ஆம்' confirms", async () => {
+    const h = "+919811100020";
+    await receiveMessage(db, tenant.id, { channel: "whatsapp", handle: h, body: "நாளை 11 மணிக்கு ஃபேஷியல் புக் செய்ய வேண்டும்" });
+    await processEvents(db, tenant);
+    const outs = async () => (await db.from("messages").select("body").eq("tenant_id", tenant.id).eq("contact_handle", h).eq("direction", "out").order("created_at")).data!;
+    const first = (await outs()).at(-1)!.body;
+    assert.match(first, /உறுதிப்படுத்த/, `Tamil proposal expected, got: ${first}`);
+    assert.match(first, /Classic facial/);
+    await receiveMessage(db, tenant.id, { channel: "whatsapp", handle: h, body: "ஆம்" });
+    await processEvents(db, tenant);
+    assert.match((await outs()).at(-1)!.body, /முன்பதிவு உறுதி/);
+    const { data: bk } = await db.from("bookings").select("start_at, clients!inner(phone, language)").eq("tenant_id", tenant.id).eq("clients.phone", h);
+    assert.equal(bk!.length, 1); assert.equal(toIst(new Date(bk![0].start_at)).time, "11:00");
+  });
+
+  test("Hindi price question gets a Hindi answer from real catalogue data", async () => {
+    const h = "+919811100021";
+    await receiveMessage(db, tenant.id, { channel: "instagram", handle: h, body: "फेशियल कितने का है?" });
+    await processEvents(db, tenant);
+    const body = (await db.from("messages").select("body").eq("contact_handle", h).eq("direction", "out").single()).data!.body;
+    assert.match(body, /Classic facial: ₹900 \(\+18% GST\), 60 मिनट/);
   });
 });
 
