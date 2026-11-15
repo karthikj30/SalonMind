@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 
 const NAV = [
   ["/app", "Dashboard"], ["/app/agents", "Agent Console"], ["/app/bookings", "Bookings"], ["/app/inbox", "Unified Inbox"],
-  ["/app/clients", "Clients"], ["/app/marketing", "Campaigns & Deals"], ["/app/services", "Services & Rooms"], ["/app/staff", "Staff & Payroll"],
+  ["/app/clients", "Clients"], ["/app/loyalty", "Memberships & Loyalty"], ["/app/marketing", "Campaigns & Deals"], ["/app/services", "Services & Rooms"], ["/app/staff", "Staff & Payroll"],
   ["/app/hr", "Recruitment"], ["/app/inventory", "Inventory & POs"], ["/app/billing", "Billing & GST"], ["/app/studio", "AI Studio"], ["/app/settings", "Settings"],
 ];
 

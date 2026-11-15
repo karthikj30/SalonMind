@@ -18,8 +18,11 @@ export type TenantSettings = {
   surge_cap_pct: number; flash_discount_cap_pct: number; reorder_buffer_days: number;
   nudge_threshold: number; deposit_threshold: number; deposit_pct: number;
   retention_grace_days: number; gst_rate: number; default_language: string;
+  loyalty_points_per_100: number; loyalty_max_redeem_pct: number; referral_bonus_points: number;
 };
 export const DEFAULT_SETTINGS: TenantSettings = {
   surge_cap_pct: 25, flash_discount_cap_pct: 20, reorder_buffer_days: 3, nudge_threshold: 0.3,
   deposit_threshold: 0.55, deposit_pct: 25, retention_grace_days: 7, gst_rate: 18, default_language: "en",
+  loyalty_points_per_100: 1, loyalty_max_redeem_pct: 50, referral_bonus_points: 200,
 };
+export type TimeOff = { staff_id: string; start_at: string; end_at: string };

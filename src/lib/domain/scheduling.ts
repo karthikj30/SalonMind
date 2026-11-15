@@ -1,4 +1,4 @@
-import type { Booking, Room, Service, Staff } from "./types.ts";
+import type { Booking, Room, Service, Staff, TimeOff } from "./types.ts";
 import { istDate, minToTime, timeToMin, toIst } from "../time.ts";
 
 /**
@@ -21,6 +21,7 @@ export type ScheduleInput = {
   staff: Staff[];
   rooms: Room[];
   bookings: Booking[]; // existing bookings that day (any status except cancelled)
+  timeOff?: TimeOff[]; // staff leave / blocked time (lunch, training, sick day)
   openTime: string;
   closeTime: string;
   priceFor?: (start: Date) => number;
@@ -69,6 +70,8 @@ export function findSlots(inp: ScheduleInput, limit = 5): SlotCandidate[] {
       if (m < timeToMin(st.work_start.slice(0, 5)) || m + dur > timeToMin(st.work_end.slice(0, 5))) continue;
       const busy = active.some((b) => b.staff_id === st.id && overlaps(sMs, eMs, +new Date(b.start_at), +new Date(b.end_at)));
       if (busy) continue;
+      const onLeave = (inp.timeOff ?? []).some((t) => t.staff_id === st.id && overlaps(sMs, eMs, +new Date(t.start_at), +new Date(t.end_at)));
+      if (onLeave) continue;
       for (const room of roomOptions) {
         if (room && active.some((b) => b.room_id === room.id && overlaps(sMs, eMs, +new Date(b.start_at), +new Date(b.end_at)))) continue;
         const price = inp.priceFor ? inp.priceFor(start) : inp.service.base_price;
@@ -87,7 +90,12 @@ export function findSlots(inp: ScheduleInput, limit = 5): SlotCandidate[] {
         score -= (l / 600) * 0.2;
         if (l < 120) reasons.push("light schedule today");
         if (prefFrom !== null) score -= (Math.abs(m - prefFrom) / 600) * 0.3;
-        if (room) reasons.push(`room ${room.name}${needEq.length ? " has " + needEq.join(", ") : ""}`);
+        if (room) {
+          // keep scarce equipped rooms (colour bays, treatment rooms) free for services that need them
+          const spare = room.equipment.filter((e) => !needEq.includes(e)).length;
+          score -= spare * 0.08;
+          reasons.push(`room ${room.name}${needEq.length ? " has " + needEq.join(", ") : spare ? "" : " (no specialist equipment tied up)"}`);
+        }
         reasons.push(`margin ₹${Math.round(margin)}`);
         out.push({ start, end, staff: st, room, score, margin, reasons });
       }

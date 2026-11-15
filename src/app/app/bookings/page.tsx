@@ -1,7 +1,7 @@
 import { getTenantContext } from "@/lib/tenant";
 import { Badge, Card, Field, Flash, Input, PageHeader, Select, Table, Td, statusTone } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
-import { bookAction, completeBooking, recordDeposit, setBookingStatus } from "../actions";
+import { addToWaitlist, bookAction, bookWaitlistOffer, completeBooking, recordDeposit, rescheduleAction, setBookingStatus } from "../actions";
 import { planBooking } from "@/lib/services/booking";
 import { addDays, fmtDateTime, inr, istDate, todayIst, toIst } from "@/lib/time";
 
@@ -9,13 +9,14 @@ export default async function Bookings({ searchParams }: { searchParams: Promise
   const sp = await searchParams;
   const { db, tenant } = await getTenantContext();
   const date = sp.date || todayIst();
-  const [{ data: bookings }, { data: clients }, { data: services }, { data: staff }, { data: products }] = await Promise.all([
+  const [{ data: bookings }, { data: clients }, { data: services }, { data: staff }, { data: products }, { data: waitlist }] = await Promise.all([
     db.from("bookings").select("*, clients(name, phone), services(name), staff(name), rooms(name)").eq("tenant_id", tenant.id)
       .gte("start_at", istDate(date, "00:00").toISOString()).lte("start_at", istDate(date, "23:59").toISOString()).order("start_at"),
     db.from("clients").select("id, name, phone").eq("tenant_id", tenant.id).order("name"),
     db.from("services").select("id, name, base_price, duration_min").eq("tenant_id", tenant.id).eq("active", true).order("name"),
     db.from("staff").select("id, name").eq("tenant_id", tenant.id).eq("active", true).order("name"),
     db.from("products").select("id, name, retail_price").eq("tenant_id", tenant.id).order("name"),
+    db.from("waitlist").select("*, clients(name), services(name)").eq("tenant_id", tenant.id).in("status", ["waiting", "offered"]).order("created_at"),
   ]);
   let plan: Awaited<ReturnType<typeof planBooking>> | null = null;
   let planError: string | null = null;
@@ -60,7 +61,18 @@ export default async function Bookings({ searchParams }: { searchParams: Promise
                           <Input name="tip" type="number" min={0} placeholder="Tip ₹" />
                           <Select name="rating" defaultValue=""><option value="">Rating</option>{[5, 4, 3, 2, 1].map((r) => <option key={r} value={r}>{r}★</option>)}</Select>
                           <Input name="review" placeholder="Client review (any language)" />
+                          <label className="flex items-center gap-1"><input type="checkbox" name="redeem_points" /> Redeem loyalty points</label>
+                          <label className="flex items-center gap-1"><input type="checkbox" name="use_wallet" /> Pay from prepaid wallet</label>
+                          <p className="text-[10px] text-slate-400">Active membership discount applies automatically.</p>
                           <SubmitButton className="w-full">Complete</SubmitButton>
+                        </form>
+                      </details>
+                      <details>
+                        <summary className="cursor-pointer text-amber-700">Reschedule</summary>
+                        <form action={rescheduleAction} className="mt-1 space-y-1 rounded border bg-slate-50 p-2">
+                          <input type="hidden" name="id" value={b.id} /><input type="hidden" name="date" value={date} />
+                          <Input type="date" name="new_date" defaultValue={date} required /><Input type="time" name="new_time" required />
+                          <SubmitButton className="w-full">Move</SubmitButton>
                         </form>
                       </details>
                       {Number(b.deposit_required) > 0 && Number(b.deposit_paid) === 0 && (
@@ -105,6 +117,27 @@ export default async function Bookings({ searchParams }: { searchParams: Promise
                 ))}
               </div>
             )}
+          </Card>
+          <Card title="Waitlist">
+            <ul className="mb-3 space-y-1 text-xs">
+              {(waitlist ?? []).map((w) => (
+                <li key={w.id} className="flex items-center justify-between gap-2 rounded border px-2 py-1">
+                  <span><b>{w.clients?.name}</b> · {w.services?.name} · {w.date ?? "any day"} {w.from_time ? `${w.from_time.slice(0, 5)}–${(w.to_time ?? "").slice(0, 5)}` : ""}</span>
+                  {w.status === "offered" ? (
+                    <form action={bookWaitlistOffer}><input type="hidden" name="id" value={w.id} /><button className="text-emerald-700 hover:underline">Book {fmtDateTime(w.offered_slot)}</button></form>
+                  ) : <Badge>waiting</Badge>}
+                </li>
+              ))}
+              {!(waitlist ?? []).length && <li className="text-slate-400">Nobody waiting. When a slot frees up, the Waitlist Agent offers it automatically.</li>}
+            </ul>
+            <form action={addToWaitlist} className="grid grid-cols-2 gap-2">
+              <Field label="Client" className="col-span-2"><Select name="client_id" required>{(clients ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
+              <Field label="Service" className="col-span-2"><Select name="service_id" required>{(services ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field>
+              <Field label="Date (blank = any)" className="col-span-2"><Input type="date" name="date" defaultValue={date} /></Field>
+              <Field label="From"><Input type="time" name="from" /></Field>
+              <Field label="To"><Input type="time" name="to" /></Field>
+              <div className="col-span-2"><SubmitButton variant="secondary">Add to waitlist</SubmitButton></div>
+            </form>
           </Card>
           <Card title="2 · Quick booking">
             <form action={bookAction} className="grid grid-cols-2 gap-2">

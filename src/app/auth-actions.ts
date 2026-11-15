@@ -58,3 +58,14 @@ export async function createSalon(fd: FormData) {
   (await cookies()).set(TENANT_COOKIE, data as string, { path: "/", httpOnly: true, sameSite: "lax" });
   redirect("/app?msg=" + encodeURIComponent("Salon created! Next: add staff, rooms and services."));
 }
+
+/** DPDP right to erasure for owners: deletes the account and every salon they solely own. */
+export async function deleteMyAccount(fd: FormData) {
+  if (String(fd.get("confirm")) !== "DELETE") redirect("/app/settings?error=" + encodeURIComponent("Type DELETE to confirm"));
+  const db = await createClient();
+  const { error } = await db.rpc("delete_my_account");
+  if (error) redirect("/app/settings?error=" + encodeURIComponent(error.message));
+  await db.auth.signOut();
+  (await cookies()).delete(TENANT_COOKIE);
+  redirect("/?msg=account-deleted");
+}

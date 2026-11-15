@@ -1,6 +1,6 @@
 // End-to-end smoke test that drives the real UI like a salon owner would.
 // Usage: BASE_URL=http://localhost:3000 node tests/e2e.mjs
-// Creates a throw-away account + salon ("E2E Test Salon <ts>") — delete it afterwards from Settings/DB.
+// Creates a throw-away account + salon and deletes both at the end via Settings → Delete (set KEEP_TEST_DATA=1 to keep them).
 import { createRequire } from "node:module";
 // works with a local devDependency or a globally installed Playwright (NODE_PATH)
 const { chromium } = createRequire(import.meta.url)("playwright");
@@ -177,6 +177,38 @@ try {
   await page.goto(`${BASE}/app/studio`);
   await submit(formWith("Describe your dashboard")); await expectOk("AI studio layout");
 
+  // ── growth features: leave, waitlist, reschedule, past visits, memberships & wallet
+  await page.goto(`${BASE}/app/staff`);
+  f = formWith("Leave & blocked time");
+  await f.locator("select[name=staff_id]").selectOption({ label: "Ravi Barber" });
+  await f.locator("input[name=reason]").fill("training");
+  await submit(f); await expectOk("staff leave");
+  await page.goto(`${BASE}/app/clients`);
+  f = formWith("Import past visit (visit history)");
+  await f.locator("select[name=client_id]").selectOption({ label: "Priya Sharma" });
+  await f.locator("select[name=service_id]").selectOption({ label: "Men's haircut & beard" });
+  await f.locator("input[name=date]").fill(new Date(Date.now() - 30 * 86400e3).toISOString().slice(0, 10));
+  await submit(f); await expectOk("past visit import");
+  await page.goto(`${BASE}/app/loyalty`);
+  f = formWith("Create plan");
+  await f.locator("input[name=name]").fill("Gold");
+  await f.locator("input[name=price]").fill("3000");
+  await f.locator("input[name=wallet_credit]").fill("500");
+  await submit(f); await expectOk("membership plan");
+  await submit(formWith("Sell membership")); await expectOk("membership sold");
+  f = formWith("Top up prepaid wallet");
+  await f.locator("input[name=amount]").fill("1000");
+  await submit(f); await expectOk("wallet top-up");
+  await page.goto(`${BASE}/app/bookings?date=${tomorrow}`);
+  f = formWith("Waitlist");
+  await f.locator("select[name=service_id]").selectOption({ label: "Balayage" });
+  await submit(f); await expectOk("waitlist entry");
+  await page.locator("summary", { hasText: "Reschedule" }).first().click();
+  const rf = page.locator("form", { has: page.locator("input[name=new_time]") }).first();
+  await rf.locator("input[name=new_time]").fill("10:00");
+  await submit(rf); await expectOk("reschedule");
+  await shot("growth");
+
   // ── marketplace (public)
   await page.goto(`${BASE}/marketplace`);
   await page.fill("input[placeholder^='e.g.']", "balayage under ₹3500 in Mumbai available tomorrow evening");
@@ -186,6 +218,16 @@ try {
   log("marketplace search results include salon:", found > 0);
   await shot("marketplace");
   if (!found) throw new Error("marketplace search did not find the salon");
+
+  // ── DPDP: owner deletes account + salon (also cleans up this test run)
+  if (!process.env.KEEP_TEST_DATA) {
+    await page.goto(`${BASE}/app/settings`);
+    await page.fill("input[name=confirm]", "DELETE");
+    await Promise.all([page.waitForURL((u) => !u.pathname.startsWith("/app"), { timeout: 60_000 }), page.click("button:has-text('Delete')")]);
+    await page.goto(`${BASE}/marketplace`);
+    if (await page.locator(`text=E2E Test Salon ${ts}`).count()) throw new Error("salon still listed after account deletion");
+    log("account + salon deleted (DPDP erasure)");
+  }
 
   log("ALL E2E STEPS PASSED");
 } catch (e) {

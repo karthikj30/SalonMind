@@ -2,6 +2,7 @@ import "server-only";
 import type { AgentDef, Tenant } from "./types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { churnRisk, lexiconSentiment, visitCycle } from "../domain/crm";
+import { daysToBirthday } from "../domain/loyalty";
 import { LANGUAGES, llmJson, llmText } from "../ai/llm";
 import { sendMessage } from "../services/messaging";
 import { createBooking, findOrCreateClient, planBooking } from "../services/booking";
@@ -15,7 +16,7 @@ export const churnAgent: AgentDef = {
   name: "Churn Analytics Agent",
   module: "CRM & Marketing",
   description: "Scores every client's churn risk from visit-cycle drift, review sentiment and no-shows; launches recovery when risk is high.",
-  subscribes: ["booking.reviewed", "booking.completed"],
+  subscribes: ["booking.reviewed", "booking.completed", "booking.completed.historical"],
   periodic: true,
   async run({ db, tenant }, ev) {
     let provider = "rules-engine";
@@ -106,10 +107,27 @@ export const retentionAgent: AgentDef = {
       });
     }
     targets = targets.filter((c) => c.consent_marketing && !contacted.has(c.id)).slice(0, 10);
-    if (!targets.length) return { summary: ev ? "Client already contacted recently or no marketing consent — skipped." : "No overdue clients right now.", skipLog: !ev };
-
     let provider = "rules-engine";
     const actions = [];
+    // Birthday campaigns (periodic only): within the next 7 days, once a year
+    if (!ev) {
+      const today = todayIst();
+      const { data: bdays } = await db.from("clients").select("id, name, phone, language, birthday, consent_marketing").eq("tenant_id", tenant.id).not("birthday", "is", null).eq("consent_marketing", true);
+      const { data: sentBday } = await db.from("campaigns").select("client_id").eq("tenant_id", tenant.id).eq("type", "birthday").gte("created_at", new Date(Date.now() - 300 * 86_400_000).toISOString());
+      const done = new Set((sentBday ?? []).map((x) => x.client_id));
+      for (const c of (bdays ?? []).filter((x) => !done.has(x.id) && daysToBirthday(x.birthday, today) <= 7).slice(0, 10)) {
+        const d = daysToBirthday(c.birthday, today);
+        const m = await writeOffer(tenant, c, `Client ${c.name}'s birthday is ${d === 0 ? "today" : `in ${d} day(s)`}. Offer: 25% off any service during their birthday week. Warm birthday wishes.`,
+          `Happy birthday in advance, ${c.name}! 🎂 Treat yourself at ${tenant.name} — enjoy 25% off any service during your birthday week. Reply YES to book.`);
+        provider = m.provider;
+        await sendMessage(db, { tenant_id: tenant.id, client_id: c.id, phone: c.phone, contact_handle: c.phone, channel: "whatsapp", body: m.text, agent: "retention", meta: { campaign: "birthday" } });
+        await db.from("campaigns").insert({ tenant_id: tenant.id, client_id: c.id, type: "birthday", message: m.text, channel: "whatsapp" });
+        actions.push({ type: "campaign", label: `Birthday offer → ${c.name}`, ref: c.id });
+      }
+    }
+    if (!targets.length && actions.length) return { summary: `Sent ${actions.length} birthday offer(s).`, actions, provider };
+    if (!targets.length) return { summary: ev ? "Client already contacted recently or no marketing consent — skipped." : "No overdue clients right now.", skipLog: !ev };
+
     for (const c of targets) {
       const { data: last } = await db.from("bookings").select("start_at, services(name, base_price), staff(name)").eq("client_id", c.id).eq("status", "completed").order("start_at", { ascending: false }).limit(1).maybeSingle();
       const svc = (last?.services as unknown as { name: string; base_price: number } | null);
@@ -124,7 +142,7 @@ export const retentionAgent: AgentDef = {
       await db.from("campaigns").insert({ tenant_id: tenant.id, client_id: c.id, type, message: msg.text, channel: "whatsapp", status: "sent" });
       actions.push({ type: "campaign", label: `${type === "churn_recovery" ? "Recovery" : "Retention"} offer → ${c.name}`, ref: c.id });
     }
-    return { summary: `Sent ${actions.length} personalised ${type.replace("_", " ")} message(s).`, actions, provider };
+    return { summary: `Sent ${actions.length} personalised message(s) (${type.replace("_", " ")}${actions.some((a) => a.label.startsWith("Birthday")) ? " + birthday" : ""}).`, actions, provider };
   },
 };
 
@@ -134,7 +152,7 @@ function ruleIntent(text: string): Intent {
   const s = text.toLowerCase();
   const devanagari = /[ऀ-ॿ]/.test(text);
   const intent: Intent["intent"] = /\b(cancel|radd)\b/.test(s) ? "cancel" : /\b(book|appointment|slot|reserve)\b/.test(s) ? "book"
-    : /\b(price|cost|rate|kitna|charges?)\b/.test(s) ? "price" : /\b(available|free|open|timing)\b/.test(s) ? "availability"
+    : /\b(price|cost|rate|rates|kitna|kitne|charges?|how much)\b/.test(s) ? "price" : /\b(available|availability|free|open|timings?|slots?)\b/.test(s) ? "availability"
     : /\b(bad|worst|complain|rude|refund)\b/.test(s) ? "complaint" : /\b(hi|hello|namaste|hey)\b/.test(s) ? "greeting" : "other";
   const today = todayIst();
   const date = /\btomorrow|kal\b/.test(s) ? addDays(today, 1) : /\btoday|aaj\b/.test(s) ? today : null;
@@ -164,6 +182,25 @@ export const conciergeAgent: AgentDef = {
     const { data: services } = await db.from("services").select("id, name, category, base_price, duration_min").eq("tenant_id", tenant.id).eq("active", true);
     let client = msg.client_id ? (await db.from("clients").select("*").eq("id", msg.client_id).single()).data : null;
     if (!client && /^\+?\d{10,13}$/.test(handle.replace(/\s/g, ""))) client = (await db.from("clients").select("*").eq("tenant_id", tenant.id).eq("phone", handle.replace(/\s/g, "")).maybeSingle()).data;
+
+    // Closing the waitlist loop: "YES" to an offered slot books it directly.
+    if (client && /^\s*(yes|y|haan|ha|han|ok|okay|confirm|1|ஆம்|అవును|হ্যাঁ|हाँ|हां)\b/i.test(msg.body)) {
+      const { data: offer } = await db.from("waitlist").select("id, service_id, offered_slot").eq("client_id", client.id).eq("status", "offered").order("created_at").limit(1).maybeSingle();
+      if (offer?.offered_slot) {
+        const t = toIst(new Date(offer.offered_slot));
+        try {
+          const r = await createBooking(db, tenant, { client_id: client.id, service_id: offer.service_id, date: t.date, time: t.time, source: "waitlist" });
+          await db.from("waitlist").update({ status: "booked", booking_id: r.booking.id }).eq("id", offer.id);
+          const body = `✅ Booked! ${r.service.name} on ${fmtDateTime(r.booking.start_at)} with ${r.slot.staff.name}, ${inr(r.booking.price)}. See you soon!`;
+          await sendMessage(db, { tenant_id: tenant.id, client_id: client.id, contact_handle: handle, phone: client.phone, channel: msg.channel, body, agent: "concierge", meta: { intent: "waitlist_accept" } });
+          return { summary: `[${msg.channel}] ${client.name} accepted waitlist offer → booked ${fmtDateTime(r.booking.start_at)}.`, actions: [{ type: "booking", label: `Waitlist → booking for ${client.name}`, ref: r.booking.id }] };
+        } catch (e) {
+          await db.from("waitlist").update({ status: "waiting", offered_slot: null }).eq("id", offer.id);
+          await sendMessage(db, { tenant_id: tenant.id, client_id: client.id, contact_handle: handle, phone: client.phone, channel: msg.channel, body: `Sorry ${client.name}, that slot was just taken. You're still on our waitlist — we'll message you when the next one opens.`, agent: "concierge" });
+          return { summary: `Waitlist offer for ${client.name} no longer available: ${(e as Error).message}` };
+        }
+      }
+    }
 
     const catalogue = (services ?? []).map((s) => `${s.name} (${s.category}) ${inr(s.base_price)}, ${s.duration_min}min`).join("; ");
     const history = (thread ?? []).reverse().map((m) => `${m.direction === "in" ? "Customer" : "Salon"}: ${m.body}`).join("\n");

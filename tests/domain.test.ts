@@ -109,3 +109,48 @@ test("Intent parser: RFP example query", () => {
   const i = parseIntent("I need a balayage haircut under ₹3000 nearby that has slots available this evening", ["Mumbai"]);
   assert.equal(i.maxPrice, 3000); assert.equal(i.fromTime, "17:00"); assert.ok(i.service.includes("balayage")); assert.ok(i.date);
 });
+
+import { checkoutPricing, pointsEarned, walletSplit, matchWaitlist, daysToBirthday } from "../src/lib/domain/loyalty.ts";
+
+test("Scheduler: staff on leave are never offered", () => {
+  const date = "2030-01-08";
+  const slots = findSlots({ service: { ...svc, min_skill_level: 1, required_equipment: [] }, date, staff: [staffA, staffB], rooms: [],
+    bookings: [], timeOff: [{ staff_id: "a", start_at: istDate(date, "00:00").toISOString(), end_at: istDate(date, "23:59").toISOString() }],
+    openTime: "10:00", closeTime: "20:00", now: new Date("2029-01-01") }, 50);
+  assert.ok(slots.length > 0 && slots.every((s) => s.staff.id === "b"));
+});
+
+test("Checkout: membership discount then points (capped) reduce taxable value", () => {
+  const r = checkoutPricing({ servicePrice: 2000, membershipPct: 20, pointsBalance: 5000, redeemPoints: true, maxRedeemPct: 50 });
+  assert.equal(r.membershipDiscount, 400); assert.equal(r.pointsUsed, 800); assert.equal(r.taxableService, 800);
+  assert.equal(checkoutPricing({ servicePrice: 1000, membershipPct: 0, pointsBalance: 120, redeemPoints: true, maxRedeemPct: 50 }).pointsUsed, 120);
+  assert.equal(checkoutPricing({ servicePrice: 1000, membershipPct: 0, pointsBalance: 120, redeemPoints: false, maxRedeemPct: 50 }).taxableService, 1000);
+});
+
+test("Loyalty earn + wallet split", () => {
+  assert.equal(pointsEarned(1180, 1), 11);
+  assert.deepEqual(walletSplit(1180, 500, true), { fromWallet: 500, remaining: 680 });
+  assert.deepEqual(walletSplit(300, 500, true), { fromWallet: 300, remaining: 0 });
+  assert.deepEqual(walletSplit(300, 500, false), { fromWallet: 0, remaining: 300 });
+});
+
+test("Waitlist: FIFO match on service, date and window", () => {
+  const e = (id: string, o: Partial<{ date: string | null; from_time: string | null; to_time: string | null; service_id: string }>, at: string) =>
+    ({ id, service_id: "s", date: null, from_time: null, to_time: null, status: "waiting", created_at: at, ...o });
+  const m = matchWaitlist([
+    e("late", {}, "2026-11-02"), e("early", { date: "2026-11-20" }, "2026-11-01"),
+    e("wrongday", { date: "2026-11-21" }, "2026-10-01"), e("morningonly", { to_time: "12:00" }, "2026-10-01"), e("othersvc", { service_id: "x" }, "2026-10-01"),
+  ], { service_id: "s", date: "2026-11-20", time: "17:00" });
+  assert.deepEqual(m.map((x) => x.id), ["early", "late"]);
+});
+
+test("Birthday countdown wraps the year", () => {
+  assert.equal(daysToBirthday("1995-11-20", "2026-11-15"), 5);
+  assert.equal(daysToBirthday("1995-01-02", "2026-12-30"), 3);
+});
+
+test("Scheduler: plain services don't tie up specialist rooms", () => {
+  const rooms = [{ id: "bay", name: "Colour bay", type: "colour", equipment: ["wash basin", "steamer"] }, { id: "chair", name: "Chair", type: "chair", equipment: [] }];
+  const slots = findSlots({ service: { ...svc, min_skill_level: 1, required_equipment: [] }, date: "2030-01-08", staff: [staffB], rooms, bookings: [], openTime: "10:00", closeTime: "20:00", now: new Date("2029-01-01") });
+  assert.ok(slots.length && slots.every((s) => s.room?.id === "chair"));
+});

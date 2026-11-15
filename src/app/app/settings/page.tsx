@@ -2,6 +2,7 @@ import { getTenantContext } from "@/lib/tenant";
 import { Card, Field, Flash, Input, PageHeader, Select, Textarea } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import { reindexServices, updateSalon, updateSettings } from "../actions";
+import { deleteMyAccount } from "../../auth-actions";
 import { STATES } from "@/lib/states";
 import { embeddingModel } from "@/lib/ai/embeddings";
 import { LANGUAGES } from "@/lib/ai/llm";
@@ -15,6 +16,9 @@ const PARAMS: [string, string, string][] = [
   ["reorder_buffer_days", "Reorder safety buffer (days)", "Added to vendor lead time"],
   ["retention_grace_days", "Retention grace (days)", "Overdue days beyond the client's cycle before an offer"],
   ["gst_rate", "GST on services %", "18% for salon services"],
+  ["loyalty_points_per_100", "Loyalty points per ₹100", "1 point = ₹1 at redemption"],
+  ["loyalty_max_redeem_pct", "Max points redemption %", "Of a bill"],
+  ["referral_bonus_points", "Referral bonus points", "Credited to the referrer after the friend's first visit"],
 ];
 
 export default async function Settings({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
@@ -36,6 +40,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
             <Field label="Closes"><Input name="close_time" type="time" defaultValue={tenant.close_time.slice(0, 5)} /></Field>
             <Field label="Address" className="col-span-2"><Input name="address" defaultValue={tenant.address ?? ""} /></Field>
             <Field label="Description" className="col-span-2"><Textarea name="description" defaultValue={tenant.description ?? ""} /></Field>
+            <Field label="Google review link" hint="Reputation Agent sends it to happy (4–5★) clients" className="col-span-2"><Input name="google_review_url" type="url" defaultValue={tenant.google_review_url ?? ""} placeholder="https://g.page/r/…/review" /></Field>
             <label className="col-span-2 flex items-center gap-2 text-sm"><input type="checkbox" name="is_published" defaultChecked={tenant.is_published} /> Listed on the consumer marketplace</label>
             <div className="col-span-2 flex items-center gap-3"><SubmitButton>Save</SubmitButton><a href={`/s/${tenant.slug}`} className="text-xs text-brand-600" target="_blank">View public page ↗</a></div>
           </form>
@@ -59,6 +64,10 @@ export default async function Settings({ searchParams }: { searchParams: Promise
               <li>DPDP: marketing consent per client, data export and right-to-erasure on the Clients page.</li>
               <li>AI agents only act through audited functions; every action is logged in the Agent Console.</li>
             </ul>
+            <form action={deleteMyAccount} className="mt-3 flex items-end gap-2 border-t pt-3">
+              <Field label="Delete my account and all salons I own (type DELETE)"><Input name="confirm" placeholder="DELETE" /></Field>
+              <SubmitButton variant="danger">Delete</SubmitButton>
+            </form>
           </Card>
         </div>
       </div>

@@ -3,13 +3,14 @@ import { getTenantContext } from "@/lib/tenant";
 import { done, fail } from "@/lib/flash";
 import { emit, processEvents, tick, runAgent } from "@/lib/agents/runtime";
 import { AGENTS } from "@/lib/agents/registry";
-import { createBooking, findOrCreateClient } from "@/lib/services/booking";
+import { createBooking, findOrCreateClient, logPastVisit, rescheduleBooking } from "@/lib/services/booking";
+import { issueInvoice } from "@/lib/services/invoicing";
 import { receiveMessage } from "@/lib/agents/crm";
 import { computePayroll, screeningTurn } from "@/lib/agents/hr";
 import { generateLayout } from "@/lib/agents/platform";
 import { embed, embeddingModel, toPgVector } from "@/lib/ai/embeddings";
 import { sendMessage } from "@/lib/services/messaging";
-import { istDate, todayIst } from "@/lib/time";
+import { addDays, istDate, todayIst, toIst } from "@/lib/time";
 
 const s = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 const n = (fd: FormData, k: string, d = 0) => (fd.get(k) === null || s(fd, k) === "" ? d : Number(fd.get(k)));
@@ -92,6 +93,7 @@ export async function addClient(fd: FormData) {
   const { error } = await db.from("clients").insert({
     tenant_id: tenant.id, name: s(fd, "name"), phone: s(fd, "phone").replace(/\s+/g, "") || null, email: s(fd, "email") || null,
     language: s(fd, "language") || "en", notes: s(fd, "notes") || null, consent_marketing: fd.get("consent") === "on",
+    birthday: s(fd, "birthday") || null, referred_by: s(fd, "referred_by") || null,
   });
   if (error) fail("/app/clients", error.message.includes("duplicate") ? "A client with this phone already exists" : error.message);
   done("/app/clients", "Client added.");
@@ -154,7 +156,8 @@ export async function completeBooking(fd: FormData) {
   const { data: b } = await db.from("bookings").select("staff_id").eq("id", id).single();
   if (n(fd, "tip") > 0 && b?.staff_id) await db.from("staff_adjustments").insert({ tenant_id: tenant.id, staff_id: b.staff_id, kind: "tip", amount: n(fd, "tip"), note: "client tip" });
   const products = s(fd, "product_id") ? [{ product_id: s(fd, "product_id"), qty: n(fd, "product_qty", 1) }] : [];
-  await emit(db, tenant.id, "booking.completed", { booking_id: id, payment_method: s(fd, "payment_method") || "upi", products }, "pos");
+  await emit(db, tenant.id, "booking.completed", { booking_id: id, payment_method: s(fd, "payment_method") || "upi", products,
+    redeem_points: fd.get("redeem_points") === "on", use_wallet: fd.get("use_wallet") === "on" }, "pos");
   if (review || rating) await emit(db, tenant.id, "booking.reviewed", { booking_id: id }, "pos");
   await processEvents(db, tenant);
   done(`/app/bookings?date=${s(fd, "date")}`, "Completed → invoice issued, inventory consumed, client scored. See Billing & Agent Console.");
@@ -342,7 +345,7 @@ export async function updateSalon(fd: FormData) {
   const [state_code, state] = s(fd, "state").split("|");
   const { error } = await db.from("tenants").update({
     name: s(fd, "name"), city: s(fd, "city"), state, state_code, gstin: s(fd, "gstin") || null, address: s(fd, "address"), phone: s(fd, "phone"),
-    description: s(fd, "description"), open_time: s(fd, "open_time"), close_time: s(fd, "close_time"), is_published: fd.get("is_published") === "on",
+    description: s(fd, "description"), google_review_url: s(fd, "google_review_url") || null, open_time: s(fd, "open_time"), close_time: s(fd, "close_time"), is_published: fd.get("is_published") === "on",
   }).eq("id", tenant.id);
   if (error) fail("/app/settings", error.message);
   done("/app/settings", "Salon profile saved.");
@@ -364,4 +367,116 @@ export async function reindexServices() {
   const { data } = await db.from("services").select("id, name, category, description").eq("tenant_id", tenant.id);
   for (const sv of data ?? []) await indexService(db, sv.id, `${sv.name}. ${sv.category}. ${sv.description ?? ""}`);
   done("/app/settings", `Re-indexed ${data?.length ?? 0} services with ${embeddingModel()}.`);
+}
+
+// ───────────── Growth features: reschedule, past visits, waitlist, leave, memberships, wallet ─────────────
+export async function rescheduleAction(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  const date = s(fd, "new_date");
+  try {
+    const r = await rescheduleBooking(db, tenant, s(fd, "id"), date, s(fd, "new_time"));
+    await processEvents(db, tenant);
+    done(`/app/bookings?date=${date}`, `Rescheduled to ${date} ${s(fd, "new_time")} with ${r.slot.staff.name} (₹${r.booking.price}). Freed slot offered to waitlist / marketplace.`);
+  } catch (e) {
+    if ((e as { digest?: string }).digest?.startsWith("NEXT_REDIRECT")) throw e;
+    fail(`/app/bookings?date=${s(fd, "date")}`, (e as Error).message);
+  }
+}
+
+export async function logPastVisitAction(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  try {
+    await logPastVisit(db, tenant, {
+      client_id: s(fd, "client_id"), service_id: s(fd, "service_id"), staff_id: s(fd, "staff_id") || null, date: s(fd, "date"),
+      price: s(fd, "price") ? n(fd, "price") : null, rating: n(fd, "rating", 0) || null, review: s(fd, "review") || null,
+    });
+    await processEvents(db, tenant);
+  } catch (e) {
+    fail("/app/clients", (e as Error).message);
+  }
+  done("/app/clients", "Past visit imported — Churn Agent recalculated the client's visit cycle.");
+}
+
+export async function addToWaitlist(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  const { error } = await db.from("waitlist").insert({
+    tenant_id: tenant.id, client_id: s(fd, "client_id"), service_id: s(fd, "service_id"), date: s(fd, "date") || null,
+    from_time: s(fd, "from") || null, to_time: s(fd, "to") || null,
+  });
+  if (error) fail("/app/bookings", error.message);
+  done(`/app/bookings?date=${s(fd, "date") || todayIst()}`, "Added to waitlist — the Waitlist Agent will offer the first matching freed slot.");
+}
+
+export async function bookWaitlistOffer(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  const { data: w } = await db.from("waitlist").select("*").eq("id", s(fd, "id")).single();
+  if (!w?.offered_slot) fail("/app/bookings", "No offered slot on this entry");
+  const t = toIst(new Date(w.offered_slot));
+  try {
+    const r = await createBooking(db, tenant, { client_id: w.client_id, service_id: w.service_id, date: t.date, time: t.time, source: "waitlist" });
+    await db.from("waitlist").update({ status: "booked", booking_id: r.booking.id }).eq("id", w.id);
+    await processEvents(db, tenant);
+    done(`/app/bookings?date=${t.date}`, "Waitlist offer converted to a booking.");
+  } catch (e) {
+    if ((e as { digest?: string }).digest?.startsWith("NEXT_REDIRECT")) throw e;
+    await db.from("waitlist").update({ status: "waiting", offered_slot: null }).eq("id", w.id);
+    fail("/app/bookings", `${(e as Error).message} — entry put back on the waitlist`);
+  }
+}
+
+export async function addTimeOff(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  const from = s(fd, "from_date"), to = s(fd, "to_date") || from;
+  const { error } = await db.from("staff_time_off").insert({
+    tenant_id: tenant.id, staff_id: s(fd, "staff_id"), reason: s(fd, "reason") || null,
+    start_at: istDate(from, s(fd, "from_time") || "00:00").toISOString(), end_at: istDate(to, s(fd, "to_time") || "23:59").toISOString(),
+  });
+  if (error) fail("/app/staff", error.message);
+  done("/app/staff", "Leave / blocked time saved — the scheduler will not offer these hours.");
+}
+
+export async function deleteTimeOff(fd: FormData) {
+  const { db } = await getTenantContext();
+  await db.from("staff_time_off").delete().eq("id", s(fd, "id"));
+  done("/app/staff", "Leave removed.");
+}
+
+export async function createPlan(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  const { error } = await db.from("membership_plans").insert({
+    tenant_id: tenant.id, name: s(fd, "name"), price: n(fd, "price"), discount_pct: n(fd, "discount_pct"),
+    validity_days: n(fd, "validity_days", 365), wallet_credit: n(fd, "wallet_credit"),
+  });
+  if (error) fail("/app/loyalty", error.message);
+  done("/app/loyalty", "Membership plan created.");
+}
+
+export async function sellMembership(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  const { data: plan } = await db.from("membership_plans").select("*").eq("id", s(fd, "plan_id")).single();
+  const clientId = s(fd, "client_id");
+  if (!plan || !clientId) fail("/app/loyalty", "Choose a plan and a client");
+  const { data: cm } = await db.from("client_memberships").insert({ tenant_id: tenant.id, client_id: clientId, plan_id: plan.id, ends_at: addDays(todayIst(), plan.validity_days) }).select("id").single();
+  if (Number(plan.wallet_credit) > 0) {
+    const { data: c } = await db.from("clients").select("wallet_balance").eq("id", clientId).single();
+    await db.from("clients").update({ wallet_balance: Number(c?.wallet_balance ?? 0) + Number(plan.wallet_credit) }).eq("id", clientId);
+    await db.from("wallet_transactions").insert({ tenant_id: tenant.id, client_id: clientId, kind: "membership_credit", amount: plan.wallet_credit, ref: cm?.id, note: plan.name });
+  }
+  const r = await issueInvoice(db, tenant, {
+    client_id: clientId, method: s(fd, "payment_method") || "upi",
+    lines: [{ description: `Membership: ${plan.name} (${plan.validity_days} days)`, kind: "service", code: "999799", qty: 1, rate: tenant.settings.gst_rate, unit_price: Number(plan.price) }],
+  });
+  await emit(db, tenant.id, "invoice.issued", { invoice_id: r.id, client_id: clientId, total: r.inv.total }, "pos");
+  await processEvents(db, tenant);
+  done("/app/loyalty", `Sold ${plan.name} — invoice ${r.number} (${r.inv.total}).`);
+}
+
+export async function walletTopup(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  const clientId = s(fd, "client_id"), amt = n(fd, "amount");
+  if (!clientId || amt <= 0) fail("/app/loyalty", "Choose a client and a positive amount");
+  const { data: c } = await db.from("clients").select("wallet_balance").eq("id", clientId).single();
+  await db.from("clients").update({ wallet_balance: Number(c?.wallet_balance ?? 0) + amt }).eq("id", clientId);
+  await db.from("wallet_transactions").insert({ tenant_id: tenant.id, client_id: clientId, kind: "topup", amount: amt, note: `via ${s(fd, "payment_method") || "upi"}` });
+  done("/app/loyalty", "Wallet topped up. (GST is charged when the balance is redeemed against a service.)");
 }

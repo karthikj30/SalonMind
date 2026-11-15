@@ -1,19 +1,20 @@
 import { getTenantContext } from "@/lib/tenant";
 import { Badge, Card, Field, Flash, Input, PageHeader, Select, Table, Td, Textarea } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
-import { addAdjustment, addStaff, runPayroll, toggleStaff } from "../actions";
-import { addDays, fmtDate, inr, todayIst } from "@/lib/time";
+import { addAdjustment, addStaff, addTimeOff, deleteTimeOff, runPayroll, toggleStaff } from "../actions";
+import { addDays, fmtDate, fmtDateTime, inr, todayIst } from "@/lib/time";
 
 type Line = { name: string; type: string; service_revenue: number; product_revenue: number; base: number; service_commission: number; product_commission: number; tips: number; penalties: number; bonus: number; booth_payout: number; net: number; breakdown: { range: string; amount: number }[] };
 
 export default async function StaffPage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const sp = await searchParams;
   const { db, tenant } = await getTenantContext();
-  const [{ data: staff }, { data: runs }, { data: learning }, { data: adj }] = await Promise.all([
+  const [{ data: staff }, { data: runs }, { data: learning }, { data: adj }, { data: leave }] = await Promise.all([
     db.from("staff").select("*").eq("tenant_id", tenant.id).order("name"),
     db.from("payroll_runs").select("*").eq("tenant_id", tenant.id).order("created_at", { ascending: false }).limit(3),
     db.from("learning_assignments").select("*, staff(name)").eq("tenant_id", tenant.id).order("created_at", { ascending: false }).limit(10),
     db.from("staff_adjustments").select("*, staff(name)").eq("tenant_id", tenant.id).order("created_at", { ascending: false }).limit(8),
+    db.from("staff_time_off").select("*, staff(name)").eq("tenant_id", tenant.id).gte("end_at", new Date().toISOString()).order("start_at"),
   ]);
   const today = todayIst();
   const latest = runs?.[0];
@@ -85,6 +86,18 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
               <div className="col-span-2"><SubmitButton>Record</SubmitButton></div>
             </form>
             <ul className="mt-3 space-y-1 text-xs text-slate-600">{(adj ?? []).map((a) => <li key={a.id}>{a.staff?.name}: {a.kind} {inr(a.amount)} {a.note && `· ${a.note}`}</li>)}</ul>
+          </Card>
+          <Card title="Leave & blocked time">
+            <form action={addTimeOff} className="grid grid-cols-2 gap-2">
+              <Field label="Staff" className="col-span-2"><Select name="staff_id" required>{(staff ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field>
+              <Field label="From date"><Input name="from_date" type="date" defaultValue={today} required /></Field>
+              <Field label="From time"><Input name="from_time" type="time" defaultValue="00:00" /></Field>
+              <Field label="To date"><Input name="to_date" type="date" defaultValue={today} /></Field>
+              <Field label="To time"><Input name="to_time" type="time" defaultValue="23:59" /></Field>
+              <Field label="Reason" className="col-span-2"><Input name="reason" placeholder="Sick leave / lunch / training" /></Field>
+              <div className="col-span-2"><SubmitButton>Block time</SubmitButton></div>
+            </form>
+            <ul className="mt-3 space-y-1 text-xs">{(leave ?? []).map((l) => <li key={l.id} className="flex justify-between gap-2"><span><b>{l.staff?.name}</b>: {fmtDateTime(l.start_at)} → {fmtDateTime(l.end_at)} {l.reason && `· ${l.reason}`}</span><form action={deleteTimeOff}><input type="hidden" name="id" value={l.id} /><button className="text-red-600">✕</button></form></li>)}</ul>
           </Card>
           <Card title="Micro-learning (assigned by Performance Coach Agent)">
             {(learning ?? []).length ? (

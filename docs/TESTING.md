@@ -70,8 +70,24 @@ Everything below is entered by hand in the UI so you can watch each agent react.
 28. **Settings**: tweak agent parameters (deposit threshold, surge cap…), toggle marketplace listing,
     export/erase a client's data (DPDP).
 
+## 10. Growth features (from market research)
+29. **Staff → Leave & blocked time**: block a stylist for a day → *Find best slots* never offers them.
+30. **Clients → Import past visit**: give a client 3 haircuts 92, 64 and 36 days ago → *Run all agents* →
+    the Campaign Agent sends the "week-5" offer (this is how to test RFP Module 2 without waiting weeks).
+31. **Memberships & Loyalty**: create a plan (e.g. Gold 20% off, ₹500 wallet credit), sell it (GST invoice),
+    top up a wallet. Complete a booking with *Redeem loyalty points* + *Pay from prepaid wallet* → the invoice
+    shows the membership discount, points and wallet split; points are earned on every invoice.
+32. Add a client with *Referred by* → complete their first visit → the referrer gets bonus points + a WhatsApp.
+33. **Bookings → Waitlist**: add a client for a service/date; cancel or *Reschedule* a matching booking →
+    the Waitlist Agent offers the freed slot; reply `YES` from that phone in the Inbox → it's booked.
+34. Set a Google review link in Settings, complete with 5★ → review request + rebook date; complete with 2★
+    → service-recovery apology + campaign entry.
+35. Give a client a birthday within 7 days → *Run Campaign Agent* → birthday offer.
+36. **Settings → Delete my account** (type DELETE) removes the account and its salons (DPDP).
+
 ## Automated checks
 ```bash
 npm run typecheck && npm test && npm run build
-BASE_URL=http://localhost:3000 node tests/e2e.mjs   # drives steps 1–14, 18–22, 27 in a real browser
+npm run test:integration                            # every RFP bullet against the real DB (see RFP_COVERAGE.md)
+BASE_URL=http://localhost:3000 node tests/e2e.mjs   # drives steps 1–14, 18–22, 27, 29–31, 33, 36 in a real browser
 ```

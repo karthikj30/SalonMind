@@ -1,0 +1,402 @@
+/**
+ * RFP integration suite — runs every agent against the REAL Supabase database (no mocks, no seed data).
+ * It creates a throw-away salon through the same service functions the UI uses, asserts on what agents
+ * actually wrote to Postgres, then deletes everything.
+ *
+ *   npm run test:integration      (needs .env.local: Supabase URL/key + agent service account)
+ *
+ * LLM keys are ignored unless USE_LLM_IN_TESTS=1, so assertions are deterministic (rules engine).
+ */
+import { after, before, describe, test } from "node:test";
+import assert from "node:assert/strict";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
+if (!process.env.USE_LLM_IN_TESTS) for (const k of ["GROQ_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY", "HF_TOKEN", "OLLAMA_BASE_URL"]) delete process.env[k];
+
+const { AGENTS } = await import("../../src/lib/agents/registry");
+const { normalizeTenant, processEvents, runAgent, emit, tick } = await import("../../src/lib/agents/runtime");
+const { createBooking, findOrCreateClient, planBooking, logPastVisit, rescheduleBooking } = await import("../../src/lib/services/booking");
+const { receiveMessage } = await import("../../src/lib/agents/crm");
+const { computePayroll, screeningTurn } = await import("../../src/lib/agents/hr");
+const { generateLayout } = await import("../../src/lib/agents/platform");
+const { searchMarketplace } = await import("../../src/lib/services/marketplace");
+const { issueInvoice } = await import("../../src/lib/services/invoicing");
+const { embed, toPgVector } = await import("../../src/lib/ai/embeddings");
+const { addDays, istDate, todayIst, toIst } = await import("../../src/lib/time");
+type Tenant = import("../../src/lib/agents/types").Tenant;
+
+const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!, KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const mk = () => createClient(URL, KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+const ts = Date.now().toString(36);
+const today = todayIst();
+const tomorrow = addDays(today, 1);
+let db: SupabaseClient;
+let tenant: Tenant;
+const ids: Record<string, string> = {};
+const agent = (id: string) => AGENTS.find((a) => a.id === id)!;
+const ctx = () => ({ db, tenant, trigger: "test" });
+const refresh = async () => { tenant = normalizeTenant((await db.from("tenants").select("*").eq("id", tenant.id).single()).data as Tenant); };
+const lastRun = async (agentId: string) => (await db.from("agent_runs").select("*").eq("tenant_id", tenant.id).eq("agent", agentId).order("created_at", { ascending: false }).limit(1).maybeSingle()).data;
+async function ins<T = { id: string }>(table: string, row: Record<string, unknown>): Promise<T> {
+  const { data, error } = await db.from(table).insert({ tenant_id: tenant.id, ...row }).select("*").single();
+  if (error) throw new Error(`${table}: ${error.message}`);
+  return data as T;
+}
+async function addService(name: string, category: string, price: number, dur: number, minSkill = 1, equipment: string[] = []) {
+  const s = await ins("services", { name, category, base_price: price, duration_min: dur, min_skill_level: minSkill, required_equipment: equipment, description: `${name} ${category}` });
+  const e = await embed(`${name}. ${category}.`);
+  await db.from("services").update({ embedding: toPgVector(e.vector), embedding_model: e.model }).eq("id", s.id);
+  return s.id;
+}
+
+before(async () => {
+  db = mk();
+  const { error } = await db.auth.signInWithPassword({ email: process.env.AGENT_BOT_EMAIL!, password: process.env.AGENT_BOT_PASSWORD! });
+  assert.ifError(error);
+  const { data, error: e2 } = await db.from("tenants").insert({
+    name: `IT Salon ${ts}`, slug: `it-salon-${ts}`, city: "Pune", state: "Maharashtra", state_code: "27", gstin: "27AAAAA0000A1Z5",
+    is_published: true, google_review_url: "https://g.page/r/it-test/review",
+  }).select("*").single();
+  assert.ifError(e2);
+  tenant = normalizeTenant(data as Tenant);
+  ids.asha = (await ins("staff", { name: "Asha", skill_level: 5, skills: ["colour", "balayage"], hourly_cost: 400 })).id;
+  ids.ravi = (await ins("staff", { name: "Ravi", skill_level: 3, skills: ["hair", "grooming"], employment_type: "booth_renter", booth_rent_pct: 30, hourly_cost: 150 })).id;
+  ids.neha = (await ins("staff", { name: "Neha", skill_level: 2, skills: ["skin"], hourly_cost: 120, base_salary: 12000 })).id;
+  ids.bay = (await ins("rooms", { name: "Colour bay", equipment: ["wash basin"] })).id;
+  ids.chair = (await ins("rooms", { name: "Chair 1", equipment: [] })).id;
+  ids.balayage = await addService("Balayage", "colour", 2500, 120, 4, ["wash basin"]);
+  ids.haircut = await addService("Men's haircut", "grooming", 500, 45, 1);
+  ids.facial = await addService("Classic facial", "skin", 900, 60, 1);
+  ids.vendorLocal = (await ins("vendors", { name: "Pune Beauty Supplies", state_code: "27", flexibility: 0.8 })).id;
+  ids.vendorOut = (await ins("vendors", { name: "Bengaluru Wholesale", state_code: "29", flexibility: 0.3 })).id;
+  ids.lightener = (await ins("products", { name: "Lightener", unit: "g", stock_qty: 90, reorder_level: 100, unit_cost: 4, vendor_id: ids.vendorLocal, lead_time_days: 4 })).id;
+  ids.serum = (await ins("products", { name: "Serum", unit: "pcs", stock_qty: 50, reorder_level: 5, unit_cost: 300, retail_price: 650, vendor_id: ids.vendorOut })).id;
+  await db.from("service_products").insert({ tenant_id: tenant.id, service_id: ids.balayage, product_id: ids.lightener, qty_per_service: 40 });
+});
+
+after(async () => {
+  if (tenant?.id) await db.from("tenants").delete().eq("id", tenant.id);
+});
+
+describe("Module 3 — scheduling, pricing, no-show", () => {
+  test("Dynamic matrix scheduling respects skill, equipment & room; prices via yield engine", async () => {
+    const c = await findOrCreateClient(db, tenant.id, { name: "Priya", phone: "+919811100001", language: "hi" });
+    ids.priya = c.id;
+    const r = await createBooking(db, tenant, { client_id: c.id, service_id: ids.balayage, date: tomorrow, time: "11:00", source: "walkin" });
+    assert.equal(r.slot.staff.id, ids.asha, "only the L5 colourist qualifies");
+    assert.equal(r.slot.room?.id, ids.bay, "needs the room with a wash basin");
+    assert.ok(r.booking.pricing_note && r.booking.price > 0);
+    ids.b1 = r.booking.id;
+    await assert.rejects(createBooking(db, tenant, { client_id: c.id, service_id: ids.balayage, date: tomorrow, time: "12:00", source: "walkin" }), /No stylist/);
+  });
+
+  test("Staff leave blocks the scheduler", async () => {
+    await ins("staff_time_off", { staff_id: ids.neha, start_at: istDate(tomorrow, "00:00").toISOString(), end_at: istDate(tomorrow, "23:59").toISOString(), reason: "sick" });
+    const plan = await planBooking(db, tenant, { service_id: ids.facial, date: tomorrow }, 30);
+    assert.ok(plan.slots.length > 0 && plan.slots.every((s) => s.staff.id !== ids.neha));
+  });
+
+  test("No-show mitigation: risky client gets a deposit demand + nudge", async () => {
+    const c = await findOrCreateClient(db, tenant.id, { name: "Flaky", phone: "+919811100002" });
+    ids.flaky = c.id;
+    for (const d of [-30, -20, -10]) await ins("bookings", { client_id: c.id, service_id: ids.haircut, start_at: istDate(addDays(today, d), "12:00").toISOString(), end_at: istDate(addDays(today, d), "12:45").toISOString(), status: "no_show", price: 500, is_historical: true });
+    const r = await createBooking(db, tenant, { client_id: c.id, service_id: ids.haircut, date: tomorrow, time: "18:00", source: "marketplace" });
+    await processEvents(db, tenant);
+    const { data: b } = await db.from("bookings").select("no_show_risk, deposit_required").eq("id", r.booking.id).single();
+    assert.ok(b!.no_show_risk >= tenant.settings.deposit_threshold, `risk ${b!.no_show_risk}`);
+    assert.ok(Number(b!.deposit_required) > 0);
+    const { data: m } = await db.from("messages").select("body").eq("client_id", c.id).eq("agent", "noshow");
+    assert.ok(m!.length >= 1 && /deposit/i.test(m![0].body));
+  });
+
+  test("Yield management: cancellation → last-minute deal; waitlist offered the slot; YES books it", async () => {
+    const w = await findOrCreateClient(db, tenant.id, { name: "Waiting Wanda", phone: "+919811100003" });
+    await ins("waitlist", { client_id: w.id, service_id: ids.haircut, date: tomorrow });
+    const { data: nb } = await db.from("bookings").select("id, start_at").eq("client_id", ids.flaky).eq("status", "booked").single();
+    await db.from("bookings").update({ status: "cancelled" }).eq("id", nb!.id);
+    await emit(db, tenant.id, "booking.cancelled", { booking_id: nb!.id }, "test");
+    await processEvents(db, tenant);
+    const { data: deal } = await db.from("deals").select("kind").eq("tenant_id", tenant.id).eq("kind", "last_minute");
+    assert.equal(deal!.length, 1);
+    const { data: wl } = await db.from("waitlist").select("status, offered_slot").eq("client_id", w.id).single();
+    assert.equal(wl!.status, "offered");
+    await receiveMessage(db, tenant.id, { channel: "whatsapp", handle: "+919811100003", body: "YES" });
+    await processEvents(db, tenant);
+    const { data: wl2 } = await db.from("waitlist").select("status, booking_id").eq("client_id", w.id).single();
+    assert.equal(wl2!.status, "booked");
+    const { data: nbk } = await db.from("bookings").select("start_at, source").eq("id", wl2!.booking_id).single();
+    assert.equal(nbk!.source, "waitlist"); assert.equal(nbk!.start_at.slice(0, 16), new Date(wl!.offered_slot).toISOString().slice(0, 16));
+  });
+
+  test("Reschedule moves the booking through the scheduler", async () => {
+    const r = await rescheduleBooking(db, tenant, ids.b1, tomorrow, "15:00");
+    assert.equal(toIst(new Date(r.booking.start_at)).time, "15:00");
+    assert.ok(r.booking.rescheduled_from);
+    await processEvents(db, tenant);
+  });
+
+  test("Off-peak flash deals / festival listings are published to the marketplace", async () => {
+    const out = await runAgent(agent("deals"), ctx());
+    const report = out.output as { occupancy: number; festival: string | null }[];
+    assert.equal(report.length, 4, "looks 4 days ahead");
+    const { count } = await db.from("deals").select("id", { count: "exact", head: true }).eq("tenant_id", tenant.id).neq("kind", "last_minute");
+    const eligible = report.some((d, i) => d.festival || ([1, 2, 3, 4].includes(toIst(istDate(addDays(today, i), "12:00")).dow) && d.occupancy < 35));
+    assert.equal((count ?? 0) > 0, eligible);
+  });
+});
+
+describe("Module 6 + loyalty — POS, split payouts, GST, memberships, wallet, points", () => {
+  test("Checkout by booth renter: GST invoice, split payout, recipe consumption, loyalty & review request", async () => {
+    const r = await createBooking(db, tenant, { client_id: ids.priya, service_id: ids.haircut, date: tomorrow, time: "13:00", staff_id: ids.ravi, source: "walkin" });
+    await db.from("bookings").update({ status: "completed", rating: 5 }).eq("id", r.booking.id);
+    await emit(db, tenant.id, "booking.completed", { booking_id: r.booking.id, payment_method: "card", products: [{ product_id: ids.serum, qty: 1 }] }, "test");
+    await processEvents(db, tenant);
+    const { data: inv } = await db.from("invoices").select("*").eq("booking_id", r.booking.id).single();
+    assert.ok(inv, "invoice issued");
+    assert.equal(Number(inv!.igst), 0); assert.equal(Number(inv!.cgst), Number(inv!.sgst));
+    assert.equal(Number(inv!.cgst) + Number(inv!.sgst), Math.round(Number(inv!.taxable_value) * 0.18 * 100) / 100);
+    assert.match(inv!.number, /^ITSA\/\d{4}-\d{2}\/\d{4}$/);
+    assert.ok(inv!.irn && inv!.irn.length === 64);
+    assert.ok(inv!.splits.booth_renter.amount > 0 && inv!.splits.gateway_fee > 0, "booth renter share + card fee");
+    const { data: c } = await db.from("clients").select("loyalty_points").eq("id", ids.priya).single();
+    assert.equal(c!.loyalty_points, Math.floor(Number(inv!.total) / 100));
+    const { data: rev } = await db.from("messages").select("body, meta").eq("client_id", ids.priya).eq("agent", "reputation");
+    assert.ok(rev!.some((m) => m.meta.kind === "review_request" && m.body.includes("g.page")));
+  });
+
+  test("Membership discount + points redemption reduce taxable value; wallet pays first", async () => {
+    const plan = await ins<{ id: string }>("membership_plans", { name: "Gold", price: 3000, discount_pct: 20, validity_days: 365, wallet_credit: 0 });
+    await ins("client_memberships", { client_id: ids.priya, plan_id: plan.id, ends_at: addDays(today, 365) });
+    await db.from("clients").update({ wallet_balance: 200 }).eq("id", ids.priya);
+    const before = (await db.from("clients").select("loyalty_points").eq("id", ids.priya).single()).data!.loyalty_points;
+    const r = await createBooking(db, tenant, { client_id: ids.priya, service_id: ids.facial, date: tomorrow, time: "16:00", source: "walkin" });
+    await db.from("bookings").update({ status: "completed" }).eq("id", r.booking.id);
+    await emit(db, tenant.id, "booking.completed", { booking_id: r.booking.id, payment_method: "upi", redeem_points: true, use_wallet: true }, "test");
+    await processEvents(db, tenant);
+    const { data: inv } = await db.from("invoices").select("*").eq("booking_id", r.booking.id).single();
+    const expectedTaxable = Math.round((Number(r.booking.price) * 0.8 - before) * 100) / 100;
+    assert.equal(Number(inv!.taxable_value), expectedTaxable);
+    assert.equal(inv!.splits.points_redeemed, before);
+    assert.equal(inv!.splits.wallet_used, 200);
+    const { data: c } = await db.from("clients").select("wallet_balance").eq("id", ids.priya).single();
+    assert.equal(Number(c!.wallet_balance), 0);
+  });
+
+  test("Referral bonus credited to referrer after friend's first visit", async () => {
+    const friend = await ins<{ id: string }>("clients", { name: "Friend", phone: "+919811100004", referred_by: ids.priya });
+    const pts0 = (await db.from("clients").select("loyalty_points").eq("id", ids.priya).single()).data!.loyalty_points;
+    const r = await createBooking(db, tenant, { client_id: friend.id, service_id: ids.haircut, date: tomorrow, time: "17:00", source: "walkin" });
+    await db.from("bookings").update({ status: "completed" }).eq("id", r.booking.id);
+    await emit(db, tenant.id, "booking.completed", { booking_id: r.booking.id, payment_method: "upi" }, "test");
+    await processEvents(db, tenant);
+    const pts1 = (await db.from("clients").select("loyalty_points").eq("id", ids.priya).single()).data!.loyalty_points;
+    assert.equal(pts1 - pts0, tenant.settings.referral_bonus_points);
+  });
+
+  test("Membership sale issues a GST invoice", async () => {
+    const r = await issueInvoice(db, tenant, { client_id: ids.priya, method: "upi", lines: [{ description: "Membership: Gold", kind: "service", code: "999799", qty: 1, rate: 18, unit_price: 3000 }] });
+    assert.equal(r.inv.total, 3540);
+  });
+
+  test("Low rating triggers service recovery", async () => {
+    const c = await findOrCreateClient(db, tenant.id, { name: "Unhappy", phone: "+919811100005" });
+    const r = await createBooking(db, tenant, { client_id: c.id, service_id: ids.haircut, date: tomorrow, time: "19:00", source: "walkin" });
+    await db.from("bookings").update({ status: "completed", rating: 2, review: "rude staff, late" }).eq("id", r.booking.id);
+    await emit(db, tenant.id, "booking.completed", { booking_id: r.booking.id, payment_method: "cash" }, "test");
+    await processEvents(db, tenant);
+    const { data } = await db.from("campaigns").select("type").eq("client_id", c.id);
+    assert.ok(data!.some((x) => x.type === "service_recovery"));
+  });
+});
+
+describe("Module 1 — procurement, negotiation, waste", () => {
+  test("Predictive refill drafts a PO and the negotiator gets a discount", async () => {
+    // checkouts above already emitted stock.check → the agent may have drafted the PO already; run it again either way
+    await runAgent(agent("inventory"), ctx());
+    await processEvents(db, tenant);
+    const { data: po } = await db.from("purchase_orders").select("*").eq("tenant_id", tenant.id).eq("vendor_id", ids.vendorLocal).order("created_at", { ascending: false }).limit(1).single();
+    assert.equal(po!.created_by, "agent:inventory");
+    assert.match(po!.ai_reasoning, /days of stock left/);
+    assert.match(po!.ai_reasoning, /Negotiated/);
+    const { data: neg } = await db.from("negotiations").select("*").eq("po_id", po!.id).single();
+    assert.ok(Number(neg!.negotiated_total) < Number(neg!.original_total));
+    assert.equal(neg!.messages.length, 2);
+    ids.po = po!.id;
+  });
+
+  test("Waste tracking flags over-use and the Performance Coach assigns training", async () => {
+    const u = await ins("usage_logs", { product_id: ids.lightener, booking_id: ids.b1, staff_id: ids.asha, expected_qty: 40, actual_qty: 60, source: "scale" });
+    await emit(db, tenant.id, "usage.logged", { usage_id: u.id }, "test");
+    await processEvents(db, tenant);
+    const { data: ul } = await db.from("usage_logs").select("flagged").eq("id", u.id).single();
+    assert.equal(ul!.flagged, true);
+    const { data: la } = await db.from("learning_assignments").select("module").eq("staff_id", ids.asha);
+    assert.ok(la!.some((x) => /waste/i.test(x.module)));
+  });
+
+  test("ITC: inter-state PO received → GSTR-3B shows IGST credit", async () => {
+    const po = await ins<{ id: string }>("purchase_orders", { vendor_id: ids.vendorOut, status: "received", is_interstate: true, items: [{ product_id: ids.serum, name: "Serum", qty: 10, unit_cost: 300, gst_rate: 18 }], subtotal: 3000, gst_amount: 540, total: 3540, received_at: new Date().toISOString() });
+    assert.ok(po.id);
+    await emit(db, tenant.id, "gst.prepare", { period: today.slice(0, 7) }, "test");
+    await processEvents(db, tenant);
+    const { data: g } = await db.from("gst_returns").select("*").eq("tenant_id", tenant.id).eq("period", today.slice(0, 7)).single();
+    assert.equal(g!.gstr3b.itc_available.igst, 540);
+    assert.ok(g!.gstr1.docs.count >= 3);
+    assert.ok(g!.gstr1.hsn.some((h: { code: string }) => h.code === "999721"));
+  });
+});
+
+describe("Module 2 — CRM, churn, unified inbox", () => {
+  test("Autonomous campaign: 4-week client at week 5 gets a personalised offer", async () => {
+    const c = await findOrCreateClient(db, tenant.id, { name: "Regular Rohan", phone: "+919811100006" });
+    for (const d of [-92, -64, -36]) await logPastVisit(db, tenant, { client_id: c.id, service_id: ids.haircut, staff_id: ids.ravi, date: addDays(today, d) });
+    await processEvents(db, tenant);
+    const { data: cl } = await db.from("clients").select("avg_cycle_days").eq("id", c.id).single();
+    assert.equal(cl!.avg_cycle_days, 28);
+    await runAgent(agent("retention"), ctx());
+    const { data } = await db.from("campaigns").select("type, message").eq("client_id", c.id);
+    assert.ok(data!.some((x) => x.type === "retention" && x.message.includes("Rohan")));
+    await assert.rejects(logPastVisit(db, tenant, { client_id: c.id, service_id: ids.haircut, date: tomorrow }), /before today/);
+  });
+
+  test("Churn: negative review + drifting frequency → at-risk → recovery offer", async () => {
+    const c = await findOrCreateClient(db, tenant.id, { name: "Drifting Diya", phone: "+919811100007" });
+    await logPastVisit(db, tenant, { client_id: c.id, service_id: ids.haircut, date: addDays(today, -106) });
+    await logPastVisit(db, tenant, { client_id: c.id, service_id: ids.haircut, date: addDays(today, -78) });
+    await logPastVisit(db, tenant, { client_id: c.id, service_id: ids.haircut, date: addDays(today, -50), rating: 1, review: "worst service, rude staff" });
+    await processEvents(db, tenant);
+    const { data: cl } = await db.from("clients").select("churn_risk").eq("id", c.id).single();
+    assert.ok(cl!.churn_risk >= 0.6, `risk ${cl!.churn_risk}`);
+    const { data } = await db.from("campaigns").select("type").eq("client_id", c.id);
+    assert.ok(data!.some((x) => x.type === "churn_recovery"));
+  });
+
+  test("Birthday campaign", async () => {
+    const c = await ins<{ id: string }>("clients", { name: "Birthday Bina", phone: "+919811100008", birthday: `1995-${addDays(today, 3).slice(5)}` });
+    await runAgent(agent("retention"), ctx());
+    const { data } = await db.from("campaigns").select("type").eq("client_id", c.id);
+    assert.ok(data!.some((x) => x.type === "birthday"));
+  });
+
+  test("Unified inbox: every channel gets an AI reply; Hinglish WhatsApp request books", async () => {
+    for (const [channel, handle, body] of [
+      ["instagram", "@insta_meera", "How much is a classic facial?"], ["google", "google-user-1", "What are your timings?"],
+      ["call", "+919811100009", "Caller asked: is men's haircut available tomorrow"], ["web", "+919811100010", "hello"],
+      ["whatsapp", "+919811100011", "kal 10am men's haircut book kar do please"],
+    ]) {
+      await receiveMessage(db, tenant.id, { channel, handle, body });
+      await processEvents(db, tenant);
+      const { data } = await db.from("messages").select("body").eq("tenant_id", tenant.id).eq("contact_handle", handle).eq("direction", "out");
+      assert.ok(data!.length >= 1, `${channel} got a reply`);
+    }
+    const { data: bk } = await db.from("bookings").select("start_at, source, clients!inner(phone)").eq("tenant_id", tenant.id).eq("clients.phone", "+919811100011");
+    assert.equal(bk!.length, 1); assert.equal(bk![0].source, "whatsapp"); assert.equal(toIst(new Date(bk![0].start_at)).time, "10:00");
+    const { data: price } = await db.from("messages").select("body").eq("contact_handle", "@insta_meera").eq("direction", "out");
+    assert.match(price![0].body, /900|facial/i);
+  });
+});
+
+describe("Module 4 — recruitment, payroll, performance", () => {
+  test("Job ads for Indian boards + resume screening + conversational interview", async () => {
+    const job = await ins("job_postings", { title: "Senior Colourist", role: "colourist", description: "balayage colour certified weekends", salary_range: "₹30k–45k" });
+    await emit(db, tenant.id, "job.created", { job_id: job.id }, "test");
+    const cand = await ins("candidates", { job_id: job.id, name: "Meena", resume_text: "Colourist with 6 years experience, L'Oreal certified in balayage and global colour, works weekends" });
+    await emit(db, tenant.id, "candidate.added", { candidate_id: cand.id }, "test");
+    await processEvents(db, tenant);
+    const { data: j } = await db.from("job_postings").select("ad_copy").eq("id", job.id).single();
+    for (const k of ["naukri", "apna", "instagram", "whatsapp"]) assert.ok(j!.ad_copy[k]);
+    const { data: c } = await db.from("candidates").select("score, status, screening_chat").eq("id", cand.id).single();
+    assert.ok(c!.score >= 70 && c!.status === "shortlisted", `score ${c!.score}`);
+    await screeningTurn(db, tenant, cand.id, "6 years at Lakme and Toni&Guy");
+    const { data: c2 } = await db.from("candidates").select("screening_chat").eq("id", cand.id).single();
+    assert.equal(c2!.screening_chat.length, 3);
+  });
+
+  test("Payroll: slabs, product commission, tips, penalties, booth-renter share", async () => {
+    await ins("staff_adjustments", { staff_id: ids.ravi, kind: "tip", amount: 100 });
+    await ins("staff_adjustments", { staff_id: ids.neha, kind: "penalty", amount: 500 });
+    const p = await computePayroll(db, tenant.id, addDays(today, -1), addDays(today, 2));
+    const ravi = p.lines.find((l) => l.staff_id === ids.ravi)!;
+    assert.equal(ravi.type, "booth_renter");
+    assert.ok(ravi.booth_payout > 0 && ravi.tips === 100 && ravi.product_revenue > 0);
+    const neha = p.lines.find((l) => l.staff_id === ids.neha)!;
+    assert.equal(neha.net, 12000 - 500);
+  });
+
+  test("Performance coach reviews utilisation and ratings", async () => {
+    const out = await runAgent(agent("performance"), ctx());
+    assert.ok((out.output as unknown[]).length === 3);
+  });
+});
+
+describe("Module 5 — marketplace", () => {
+  test("Intent search: RFP-style query finds the salon with live slots under budget", async () => {
+    const r = await searchMarketplace(db, `balayage under ₹4000 in Pune available tomorrow evening`);
+    assert.equal(r.intent.maxPrice, 4000);
+    assert.equal(r.intent.city, "Pune");
+    const hit = r.results.find((x) => x.tenant.id === tenant.id);
+    assert.ok(hit, "salon found");
+    assert.equal(hit!.service.id, ids.balayage);
+    assert.ok(hit!.slots.every((s) => s.time >= "17:00" && s.price <= 4000));
+  });
+
+  test("Public (anon) can read live deals and services but not bookings or clients", async () => {
+    const anon = mk();
+    const { data: deals } = await anon.from("deals").select("id").eq("tenant_id", tenant.id);
+    assert.ok(deals!.length >= 1);
+    const { data: svc } = await anon.from("services").select("id").eq("tenant_id", tenant.id);
+    assert.equal(svc!.length, 3);
+    const { data: bk } = await anon.from("bookings").select("id").eq("tenant_id", tenant.id);
+    assert.equal(bk!.length, 0);
+    const { data: cl } = await anon.from("clients").select("id").eq("tenant_id", tenant.id);
+    assert.equal(cl!.length, 0);
+  });
+});
+
+describe("Platform — orchestrator, self-optimizer, generative UI, multi-tenancy", () => {
+  test("Orchestrator tick runs every periodic agent and drains the bus", async () => {
+    const r = await tick(db, tenant);
+    assert.equal(r.results.length, AGENTS.filter((a) => a.periodic).length);
+    const { count } = await db.from("agent_events").select("id", { count: "exact", head: true }).eq("tenant_id", tenant.id).eq("status", "pending");
+    assert.equal(count, 0);
+  });
+
+  test("Self-optimizer tightens deposit threshold when no-shows are high", async () => {
+    for (const d of [-5, -4, -3]) await ins("bookings", { client_id: ids.flaky, service_id: ids.haircut, start_at: istDate(addDays(today, d), "12:00").toISOString(), end_at: istDate(addDays(today, d), "12:45").toISOString(), status: "no_show", price: 500, is_historical: true });
+    const before = tenant.settings.deposit_threshold;
+    await runAgent(agent("optimizer"), ctx());
+    await refresh();
+    assert.ok(tenant.settings.deposit_threshold < before, `${tenant.settings.deposit_threshold} < ${before}`);
+  });
+
+  test("Generative micro-frontend only uses registry widgets", async () => {
+    const r = await generateLayout(db, tenant, "show revenue, low stock and at risk clients", "hi");
+    assert.ok(r.widgets.length >= 1);
+    assert.ok(r.widgets.every((w) => ["revenue_today", "revenue_30d", "bookings_today", "no_show_rate", "at_risk_clients", "low_stock", "upcoming_bookings", "active_deals", "pending_pos", "revenue_by_service", "staff_revenue", "gst_month", "agent_actions"].includes(w.dataset)));
+  });
+
+  test("Tenant isolation: two owners cannot see or write each other's data; owners can delete themselves", async () => {
+    const users = [] as SupabaseClient[];
+    for (const who of ["a", "b"]) {
+      const email = `it-${ts}-${who}@salonmind.test`;
+      const { error } = await db.rpc("provision_user", { p_email: email, p_password: "Test12345!", p_name: who });
+      assert.ifError(error);
+      const u = mk();
+      assert.ifError((await u.auth.signInWithPassword({ email, password: "Test12345!" })).error);
+      users.push(u);
+    }
+    const [A, B] = users;
+    const tA = (await A.rpc("create_tenant", { p_name: "A salon", p_slug: `a-${ts}`, p_city: "Delhi", p_state: "Delhi", p_state_code: "07", p_gstin: null, p_address: "", p_phone: "", p_description: "" })).data as string;
+    const tB = (await B.rpc("create_tenant", { p_name: "B salon", p_slug: `b-${ts}`, p_city: "Delhi", p_state: "Delhi", p_state_code: "07", p_gstin: null, p_address: "", p_phone: "", p_description: "" })).data as string;
+    assert.ifError((await A.from("clients").insert({ tenant_id: tA, name: "A's secret client", phone: "+910000000001" })).error);
+    assert.equal((await B.from("clients").select("id").eq("tenant_id", tA)).data!.length, 0, "B cannot read A's clients");
+    assert.ok((await B.from("clients").insert({ tenant_id: tA, name: "intruder" })).error, "B cannot write into A");
+    assert.equal((await B.from("clients").select("id").eq("tenant_id", tenant.id)).data!.length, 0, "B cannot read the test salon");
+    assert.ok((await A.rpc("provision_user", { p_email: `x-${ts}@salonmind.test`, p_password: "Test12345!", p_name: "x" })).error, "owners cannot provision accounts");
+    for (const [u, t] of [[A, tA], [B, tB]] as const) {
+      const { data, error } = await u.rpc("delete_my_account");
+      assert.ifError(error); assert.equal(data, 1);
+      assert.equal((await db.from("tenants").select("id").eq("id", t)).data!.length, 0);
+    }
+  });
+});

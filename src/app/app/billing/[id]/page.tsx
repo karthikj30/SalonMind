@@ -33,6 +33,7 @@ export default async function Invoice({ params }: { params: Promise<{ id: string
       {inv.irn && <p className="mt-4 break-all font-mono text-[10px] text-slate-500">IRN (reference): {inv.irn}</p>}
       <div className="mt-6 rounded-lg bg-slate-50 p-3 text-xs">
         <p className="mb-1 font-semibold">Split payout ({String(inv.payment_method).toUpperCase()})</p>
+        {(sp.membership_discount > 0 || sp.points_redeemed > 0 || sp.wallet_used > 0) && <p className="mb-1">Membership discount {inr(sp.membership_discount ?? 0)} · Points redeemed {sp.points_redeemed ?? 0} · Paid from wallet {inr(sp.wallet_used ?? 0)} · Collected now {inr(sp.collected_now ?? 0)}</p>}
         <p>Tax bucket: {inr(sp.tax_bucket)} · Gateway fee: {inr(sp.gateway_fee)} · Salon owner: {inr(sp.salon_owner)}{sp.booth_renter && ` · Booth renter ${sp.booth_renter.name}: ${inr(sp.booth_renter.amount)}`}</p>
       </div>
       <p className="no-print mt-6 text-center text-xs"><a href="/app/billing" className="text-brand-600">← back</a> · use your browser&apos;s Print to save as PDF</p>

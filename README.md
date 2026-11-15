@@ -2,7 +2,7 @@
 
 A multi-tenant SaaS where a mesh of AI agents runs salon operations: procurement, vendor negotiation,
 waste tracking, unified WhatsApp/Instagram/Google inbox, churn prediction, retention campaigns, matrix
-scheduling, yield pricing, no-show mitigation, recruitment, payroll, GST billing — plus a consumer
+scheduling, yield pricing, no-show mitigation, recruitment, payroll, GST billing — memberships, prepaid wallet, loyalty & referrals, waitlist, reviews — plus a consumer
 marketplace with natural-language and photo search. Built from the RFP in this repo and runs **entirely
 on free tiers**.
 
@@ -10,6 +10,7 @@ on free tiers**.
 * **Architecture & RFP mapping:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 * **Antigravity master prompt (plan & build):** [`docs/ANTIGRAVITY_PROMPT.md`](docs/ANTIGRAVITY_PROMPT.md) · rules in [`.agent/`](.agent)
 * **Manual test script:** [`docs/TESTING.md`](docs/TESTING.md)
+* **RFP → code → test traceability:** [`docs/RFP_COVERAGE.md`](docs/RFP_COVERAGE.md) · **market research:** [`docs/RESEARCH.md`](docs/RESEARCH.md)
 
 ## Stack (all free)
 
@@ -17,13 +18,13 @@ Next.js 15 on Vercel Hobby · Supabase Postgres + pgvector + Auth + pg_cron (Mum
 Groq → Gemini → OpenRouter `:free` → Hugging Face → Ollama → deterministic rules engine.
 Works with **no AI key at all** (rules-engine mode); add a free key to unlock multilingual LLM behaviour.
 
-## 13 agents
+## 16 agents
 
 | Module | Agents |
 |---|---|
 | Procurement & Inventory | Procurement (predictive refill), Vendor Negotiation, Waste Tracking |
-| CRM & Marketing | AI Concierge (unified inbox), Churn Analytics, Campaign |
-| Scheduling & Resources | No-Show, Yield Pricing / Deals (+ matrix scheduler engine) |
+| CRM & Marketing | AI Concierge (unified inbox), Churn Analytics, Campaign (cycle, recovery, birthday), Loyalty & Referral, Reputation & Rebooking |
+| Scheduling & Resources | No-Show, Yield Pricing / Deals, Waitlist (+ matrix scheduler with staff leave) |
 | Recruitment & HR | Recruitment, Performance Coach (+ payroll engine) |
 | Billing, POS & GST | Billing & POS, GST Compliance |
 | Platform | Self-Optimizer (+ AI Studio generative dashboards) |
@@ -55,8 +56,9 @@ After adding `GEMINI_API_KEY`, click **Settings → Re-index services** to switc
 ## Tests
 
 ```bash
-npm run typecheck && npm test && npm run build      # 14 domain unit tests (GST, payroll, scheduler, pricing…)
-BASE_URL=http://localhost:3000 node tests/e2e.mjs   # browser E2E through the real UI
+npm run typecheck && npm test && npm run build      # 19 domain unit tests (GST, payroll, scheduler, pricing, loyalty…)
+npm run test:integration                            # 27 tests against the real Supabase DB — every RFP bullet + tenant isolation
+BASE_URL=http://localhost:3000 node tests/e2e.mjs   # browser E2E through the real UI (cleans up via account deletion)
 ```
 
 ## Autonomy (cron)

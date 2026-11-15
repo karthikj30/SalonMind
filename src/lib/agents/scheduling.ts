@@ -71,7 +71,9 @@ export const dealsAgent: AgentDef = {
     if (!services?.length) return { summary: "No services yet.", skipLog: true };
     const actions = [];
     if (ev) {
-      const { data: b } = await db.from("bookings").select("*, services(name)").eq("id", ev.payload.booking_id as string).single();
+      const { data: bk } = await db.from("bookings").select("*, services(name)").eq("id", ev.payload.booking_id as string).single();
+      // on reschedule the booking row already moved — use the freed slot carried in the event
+      const b = bk && ev.payload.freed_start ? { ...bk, start_at: ev.payload.freed_start as string, service_id: ev.payload.service_id as string } : bk;
       if (b && new Date(b.start_at) > new Date()) {
         const pct = Math.min(s.flash_discount_cap_pct, 15);
         await db.from("deals").insert({ tenant_id: tenant.id, service_id: b.service_id, kind: "last_minute", discount_pct: pct, slot_start: b.start_at, valid_to: b.start_at,

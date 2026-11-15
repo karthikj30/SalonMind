@@ -12,4 +12,5 @@ trigger: always_on
 - Every new table: `tenant_id` + RLS `tenant_isolation` policy in a new migration under `supabase/migrations`.
 - No seed/synthetic data. Users create data manually through the UI.
 - All times IST (`src/lib/time.ts`), money via `inr()`, GST via `src/lib/domain/gst.ts`.
-- Before committing: `npm run typecheck && npm test && npm run build`, then verify in the browser.
+- Before committing: `npm run typecheck && npm test && npm run build`, then `npm run test:integration` (real DB) and verify in the browser.
+- Every new agent/feature gets a row in `docs/RFP_COVERAGE.md` and an integration test in `tests/integration/`.

@@ -67,7 +67,7 @@ flowchart LR
   `message.received`, `usage.logged`, `job.created`, …) and agents themselves (`po.drafted`,
   `client.at_risk`, `staff.waste_flag`, `stock.check`). Consumers claim events optimistically
   (`pending → processing` compare-and-set) so concurrent invocations never double-process.
-* **Agents** (`src/lib/agents/*`) are plain async functions with a declared `subscribes[]` and
+* **Agents** (`src/lib/agents/*`, 16 agents) are plain async functions with a declared `subscribes[]` and
   `periodic` flag. Every run is persisted to `agent_runs` (summary, actions, raw output, LLM provider,
   duration) → full explainability in the **Agent Console**.
 * **Orchestrator** (`tick()`) runs all periodic agents for a tenant, then drains the bus. Triggered by
@@ -99,6 +99,10 @@ flowchart LR
 | GST engine | `billing` (CGST/SGST/IGST e-invoice + IRN ref) + `gst` agent (GSTR-1, GSTR-3B, ITC) | completion, periodic |
 | Self-optimising engine | `optimizer` — tunes thresholds/caps from no-show rate & occupancy | periodic |
 | Auto-generated micro-frontends | `generateLayout` (AI Studio) — NL → validated widget schema → dashboard | manual |
+| *Added:* memberships, wallet, points | `billing` (checkout pricing) + `loyalty` agent (earn, referral bonus) | `booking.completed`, `invoice.issued` |
+| *Added:* review requests & service recovery | `reputation` agent | `invoice.issued` |
+| *Added:* automated waitlist | `waitlist` agent + concierge "YES" handling | `booking.cancelled`, periodic |
+| *Added:* staff leave, rescheduling, history import | scheduler `timeOff`, `rescheduleBooking`, `logPastVisit` | — |
 
 ## 4. Multi-tenant isolation
 

@@ -85,6 +85,12 @@ emit / runAgent / processEvents(claim pending→processing) / tick)
  M6 Billing/GST: billing (on booking.completed: invoice with CGST/SGST/IGST, FY invoice numbers,
     IRN-style hash, split payout owner/booth-renter/tax-bucket/gateway-fee, recipe stock consumption,
     emit stock.check), gst (GSTR-1 B2CS/HSN/docs, GSTR-3B with ITC utilisation order from received POs).
+ Growth (from market research — Zenoti/Fresha/MioSalon/Dingg/OpenSalon): memberships with auto
+    discount, prepaid wallet (GST at redemption), loyalty points + referral bonus (loyalty agent on
+    invoice.issued), automated waitlist (waitlist agent on booking.cancelled; concierge books on "YES"),
+    staff leave respected by the scheduler, rescheduling, visit-history import, reputation agent
+    (Google review request for 4–5★, service recovery for ≤3★, next-visit suggestion), birthday offers,
+    owner self-service account deletion (DPDP).
  Platform: optimizer (bounded self-tuning of thresholds/caps from no-show rate & occupancy, logged),
     AI Studio (NL prompt → validated widget-schema dashboard = generative micro-frontend; LLM may only
     pick from a typed registry — never generate executable code).
@@ -117,7 +123,10 @@ rooms, services, products, vendor, recipe, client; book via suggestions; complet
 Hinglish WhatsApp test message; run agents; check Agent Console, Billing, Inventory POs, HR, Studio,
 Marketplace search for "balayage under ₹3000 available this evening", book from the public page.
 Capture screenshots/recordings as artifacts. Fix anything that is not visibly correct.
-Run `npm run typecheck && npm test && npm run build` before every commit.
+Run `npm run typecheck && npm test && npm run build && npm run test:integration` before every commit.
+Integration tests hit the REAL Supabase DB with the platform-agent account, create a throw-away salon,
+run agents, assert on the rows they wrote, and delete everything. One test per RFP bullet — keep
+docs/RFP_COVERAGE.md (requirement → code → test) up to date.
 
 ENV
 NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY (publishable), AGENT_BOT_EMAIL,
