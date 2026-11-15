@@ -14,7 +14,7 @@ export default async function Marketing({ searchParams }: { searchParams: Promis
   ]);
   return (
     <>
-      <PageHeader title="Campaigns & Deals" subtitle="The Campaign Agent messages clients who are overdue vs. their own visit cycle; the Yield Pricing Agent publishes flash / last-minute / festival deals to the marketplace.">
+      <PageHeader eyebrow="Clients & growth" title="Campaigns & Deals" subtitle="The Campaign Agent messages clients who are overdue vs. their own visit cycle; the Yield Pricing Agent publishes flash / last-minute / festival deals to the marketplace.">
         <form action={runAgentNow}><input type="hidden" name="agent" value="retention" /><SubmitButton variant="secondary">Run Campaign Agent</SubmitButton></form>
         <form action={runAgentNow}><input type="hidden" name="agent" value="deals" /><SubmitButton variant="secondary">Run Yield Agent</SubmitButton></form>
       </PageHeader>
@@ -24,10 +24,10 @@ export default async function Marketing({ searchParams }: { searchParams: Promis
           <Table head={["Deal", "Kind", "Service", "Off", "Valid to", "By", ""]} empty="No deals yet.">
             {(deals ?? []).map((d) => (
               <tr key={d.id} className={d.active && new Date(d.valid_to) > new Date() ? "" : "opacity-50"}>
-                <Td><div className="font-medium">{d.title}</div><div className="text-xs text-slate-500">{d.description}</div></Td>
+                <Td><div className="font-medium">{d.title}</div><div className="text-xs text-brand-900/55">{d.description}</div></Td>
                 <Td><Badge tone={d.kind === "festival" ? "pink" : d.kind === "last_minute" ? "red" : "blue"}>{d.kind}</Badge></Td>
                 <Td>{d.services?.name ?? "—"}</Td><Td>{d.discount_pct}%</Td><Td className="text-xs">{fmtDateTime(d.valid_to)}</Td><Td className="text-xs">{d.created_by}</Td>
-                <Td><form action={toggleDeal}><input type="hidden" name="id" value={d.id} /><input type="hidden" name="active" value={String(d.active)} /><button className="text-xs text-slate-500 hover:text-brand-600">{d.active ? "Pause" : "Resume"}</button></form></Td>
+                <Td><form action={toggleDeal}><input type="hidden" name="id" value={d.id} /><input type="hidden" name="active" value={String(d.active)} /><button className="text-xs text-brand-900/55 hover:text-brand-600">{d.active ? "Pause" : "Resume"}</button></form></Td>
               </tr>
             ))}
           </Table>

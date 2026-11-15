@@ -15,7 +15,7 @@ export default async function Services({ searchParams }: { searchParams: Promise
   ]);
   return (
     <>
-      <PageHeader title="Services & Rooms" subtitle="The scheduler matches each service's skill level and equipment against stylists and rooms. Recipes tell the inventory agents how much product each service consumes." />
+      <PageHeader eyebrow="Operations" title="Services & Rooms" subtitle="The scheduler matches each service's skill level and equipment against stylists and rooms. Recipes tell the inventory agents how much product each service consumes." />
       <Flash msg={sp.msg} error={sp.error} />
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Service menu" className="lg:col-span-2">

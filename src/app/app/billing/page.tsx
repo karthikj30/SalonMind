@@ -19,7 +19,7 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
   const g1 = ret?.gstr1 as { b2cs: { pos: string; rate: number; taxable: number; cgst: number; sgst: number; igst: number }[]; hsn: { code: string; kind: string; qty: number; taxable: number; tax: number }[]; docs: { from: string; to: string; count: number } } | undefined;
   return (
     <>
-      <PageHeader title="Billing, POS & GST" subtitle="Invoices are issued automatically by the Billing Agent when a service is completed. Split payouts route money to the owner, booth renters and the tax bucket. The GST Agent drafts GSTR-1 & GSTR-3B with ITC from received purchase orders." />
+      <PageHeader eyebrow="Finance" title="Billing, POS & GST" subtitle="Invoices are issued automatically by the Billing Agent when a service is completed. Split payouts route money to the owner, booth renters and the tax bucket. The GST Agent drafts GSTR-1 & GSTR-3B with ITC from received purchase orders." />
       <Flash msg={sp.msg} error={sp.error} />
       {!tenant.gstin && <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Add your GSTIN in Settings to generate e-invoice reference numbers (IRN).</p>}
       <div className="grid gap-4 lg:grid-cols-3">
@@ -42,16 +42,16 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
           </form>
           {g ? (
             <div className="space-y-3 text-sm">
-              {ret?.notes && <p className="rounded bg-slate-50 p-2 text-xs">{ret.notes}</p>}
+              {ret?.notes && <p className="rounded bg-ivory-100 p-2 text-xs">{ret.notes}</p>}
               <table className="w-full text-xs">
-                <thead><tr className="text-slate-500"><th className="text-left">GSTR-3B</th><th>CGST</th><th>SGST</th><th>IGST</th></tr></thead>
+                <thead><tr className="text-brand-900/55"><th className="text-left">GSTR-3B</th><th>CGST</th><th>SGST</th><th>IGST</th></tr></thead>
                 <tbody>
                   {([["3.1(a) Output tax", g.outward_taxable], ["4(A) ITC available", g.itc_available], ["Payable in cash", g.tax_payable_cash], ["Credit c/f", g.credit_carried_forward]] as const).map(([l, r]) => (
                     <tr key={l} className="border-t"><td className="py-1">{l}</td><td className="text-center">{inr(r.cgst)}</td><td className="text-center">{inr(r.sgst)}</td><td className="text-center">{inr(r.igst)}</td></tr>
                   ))}
                 </tbody>
               </table>
-              <p className="text-xs text-slate-500">Outward taxable value: {inr(g.outward_taxable.taxable)}</p>
+              <p className="text-xs text-brand-900/55">Outward taxable value: {inr(g.outward_taxable.taxable)}</p>
               {g1 && (
                 <>
                   <p className="font-semibold">GSTR-1 · B2CS</p>
@@ -63,7 +63,7 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
               )}
               <a className="text-xs text-brand-600 hover:underline" href={`/api/gst/${period}`}>Download JSON</a>
             </div>
-          ) : <p className="text-sm text-slate-400">No draft for {period} yet.</p>}
+          ) : <p className="text-sm text-brand-900/40">No draft for {period} yet.</p>}
         </Card>
       </div>
     </>

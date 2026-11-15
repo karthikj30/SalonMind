@@ -2,20 +2,21 @@ import Link from "next/link";
 import { signIn } from "../auth-actions";
 import { Field, Input, Flash } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
+import { AuthShell } from "@/components/AuthShell";
+
+export const metadata = { title: "Log in" };
 
 export default async function Login({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const sp = await searchParams;
   return (
-    <main className="mx-auto mt-20 max-w-sm px-4">
-      <Link href="/" className="text-lg font-bold text-brand-700">✂️ SalonMind</Link>
-      <h1 className="mb-4 mt-6 text-xl font-bold">Log in</h1>
+    <AuthShell title="Welcome back" subtitle="Log in to your salon's command centre.">
       <Flash error={sp.error} msg={sp.msg} />
-      <form action={signIn} className="space-y-3 rounded-xl border bg-white p-5 shadow-sm">
+      <form action={signIn} className="space-y-4 rounded-2xl border border-brand-100 bg-white p-6 shadow-soft">
         <Field label="Email"><Input name="email" type="email" required autoComplete="email" /></Field>
         <Field label="Password"><Input name="password" type="password" required autoComplete="current-password" /></Field>
-        <SubmitButton className="w-full">Log in</SubmitButton>
+        <SubmitButton className="w-full !py-2.5">Log in</SubmitButton>
       </form>
-      <p className="mt-4 text-center text-sm text-slate-500">New salon? <Link href="/signup" className="text-brand-600">Create an account</Link></p>
-    </main>
+      <p className="mt-5 text-center text-sm text-brand-900/60">New salon? <Link href="/signup" className="font-medium text-brand-600 hover:underline">Create an account</Link></p>
+    </AuthShell>
   );
 }

@@ -24,20 +24,20 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Re
   const last = thread[thread.length - 1];
   return (
     <>
-      <PageHeader title="Unified Inbox" subtitle="WhatsApp, Instagram DMs, Google Business messages, call transcripts and web chat land here; the AI Concierge replies in the customer's language and can book directly. Outbound messages show as “simulated” unless WhatsApp Cloud API keys are configured." />
+      <PageHeader eyebrow="Front desk" title="Unified Inbox" subtitle="WhatsApp, Instagram DMs, Google Business messages, call transcripts and web chat land here; the AI Concierge replies in the customer's language and can book directly. Outbound messages show as “simulated” unless WhatsApp Cloud API keys are configured." />
       <Flash msg={sp.msg} error={sp.error} />
       <div className="grid gap-4 lg:grid-cols-[260px_1fr_300px]">
         <Card title="Conversations">
           <ul className="-mx-2 space-y-0.5">
             {[...threads.values()].map((t) => (
               <li key={t.handle}>
-                <a href={`?h=${encodeURIComponent(t.handle)}`} className={`block rounded-lg px-2 py-1.5 text-sm ${t.handle === active ? "bg-brand-50" : "hover:bg-slate-50"}`}>
-                  <div className="flex justify-between"><b className="truncate">{human.has(t.handle) && "👤 "}{t.name ?? t.handle}</b><span className="text-[10px] text-slate-400">{CH[t.last.channel]?.split(" ")[0]}</span></div>
-                  <p className="truncate text-xs text-slate-500">{t.last.body}</p>
+                <a href={`?h=${encodeURIComponent(t.handle)}`} className={`block rounded-lg px-2 py-1.5 text-sm ${t.handle === active ? "bg-brand-50" : "hover:bg-ivory-100"}`}>
+                  <div className="flex justify-between"><b className="truncate">{human.has(t.handle) && "👤 "}{t.name ?? t.handle}</b><span className="text-[10px] text-brand-900/40">{CH[t.last.channel]?.split(" ")[0]}</span></div>
+                  <p className="truncate text-xs text-brand-900/55">{t.last.body}</p>
                 </a>
               </li>
             ))}
-            {!threads.size && <p className="px-2 text-sm text-slate-400">No conversations yet — send a test message →</p>}
+            {!threads.size && <p className="px-2 text-sm text-brand-900/40">No conversations yet — send a test message →</p>}
           </ul>
         </Card>
         <Card title={active ? `Thread · ${active}` : "Thread"} actions={active ? (
@@ -48,9 +48,9 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Re
           </form>) : null}>
           <div className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto">
             {thread.map((m) => (
-              <div key={m.id} className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${m.direction === "in" ? "self-start bg-slate-100" : "self-end bg-brand-50"}`}>
+              <div key={m.id} className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${m.direction === "in" ? "self-start bg-brand-50" : "self-end bg-brand-50"}`}>
                 <p className="whitespace-pre-wrap">{m.body}</p>
-                <p className="mt-1 flex flex-wrap gap-1 text-[10px] text-slate-500">
+                <p className="mt-1 flex flex-wrap gap-1 text-[10px] text-brand-900/55">
                   {CH[m.channel]} · {fmtDateTime(m.created_at)} {m.agent && <Badge tone="violet">{m.agent}</Badge>} {m.direction === "out" && <Badge tone={m.status === "sent" ? "green" : "amber"}>{m.status}</Badge>}
                   {m.meta?.intent && <Badge tone="blue">intent: {String(m.meta.intent)} · {String(m.meta.language)}</Badge>}
                 </p>

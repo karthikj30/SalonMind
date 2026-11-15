@@ -19,7 +19,7 @@ export default async function Loyalty({ searchParams }: { searchParams: Promise<
   const s = tenant.settings;
   return (
     <>
-      <PageHeader title="Memberships, Wallet & Loyalty" subtitle={`Prepaid memberships (auto-discount at checkout), prepaid wallet, and loyalty points (${s.loyalty_points_per_100} pt per ₹100, 1 pt = ₹1, max ${s.loyalty_max_redeem_pct}% of a bill). Referrers earn ${s.referral_bonus_points} pts when their friend completes a first visit — handled by the Loyalty & Referral Agent.`} />
+      <PageHeader eyebrow="Clients & growth" title="Memberships, Wallet & Loyalty" subtitle={`Prepaid memberships (auto-discount at checkout), prepaid wallet, and loyalty points (${s.loyalty_points_per_100} pt per ₹100, 1 pt = ₹1, max ${s.loyalty_max_redeem_pct}% of a bill). Referrers earn ${s.referral_bonus_points} pts when their friend completes a first visit — handled by the Loyalty & Referral Agent.`} />
       <Flash msg={sp.msg} error={sp.error} />
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Membership plans" className="lg:col-span-2">

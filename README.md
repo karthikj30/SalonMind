@@ -12,6 +12,18 @@ on free tiers**.
 * **Manual test script:** [`docs/TESTING.md`](docs/TESTING.md)
 * **RFP → code → test traceability:** [`docs/RFP_COVERAGE.md`](docs/RFP_COVERAGE.md) · **market research:** [`docs/RESEARCH.md`](docs/RESEARCH.md)
 
+## Look & feel
+
+A luxury-salon design system — deep plum, blush rose-gold and champagne on ivory, Playfair Display + Inter,
+line icons — with a visual stylist day-calendar, grouped navigation (mobile drawer), installable PWA, and a
+redesigned marketplace and salon booking page. Screenshots below come from an automated test salon.
+
+| Landing | Dashboard | Day calendar |
+|---|---|---|
+| ![Landing](docs/screenshots/landing.jpg) | ![Dashboard](docs/screenshots/dashboard.jpg) | ![Bookings](docs/screenshots/bookings.jpg) |
+| **Marketplace** | **Salon page** | **Mobile menu** |
+| ![Marketplace](docs/screenshots/marketplace.jpg) | ![Salon](docs/screenshots/salon.jpg) | ![Mobile](docs/screenshots/m-menu.jpg) |
+
 ## Stack (all free)
 
 Next.js 15 on Vercel Hobby · Supabase Postgres + pgvector + Auth + pg_cron (Mumbai) · LLM gateway with

@@ -11,8 +11,17 @@ import { ChatWidget } from "./ChatWidget";
 import { SubmitButton } from "@/components/SubmitButton";
 import { upiLink } from "@/lib/domain/upi";
 import { qrSvg } from "@/lib/services/qr";
+import { category, monogram } from "@/lib/ui/categories";
+import { ArrowLeft, CheckCircle2, Clock, MapPin, Star, Ticket } from "lucide-react";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const db = await botClient();
+  const { data } = await db.from("tenants").select("name, city, description").eq("slug", slug).maybeSingle();
+  return data ? { title: `${data.name}${data.city ? ", " + data.city : ""}`, description: data.description ?? undefined } : {};
+}
 
 export default async function SalonPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<Record<string, string>> }) {
   const { slug } = await params;
@@ -36,70 +45,111 @@ export default async function SalonPage({ params, searchParams }: { params: Prom
   if (booked && Number(booked.deposit_required) > 0 && tenant.upi_vpa) {
     try { const link = upiLink({ vpa: tenant.upi_vpa, name: tenant.name, amount: Number(booked.deposit_required), note: `Deposit ${booked.services?.name ?? ""}`.trim(), ref: String(sp.booked).slice(0, 12) }); payQr = { link, svg: await qrSvg(link) }; } catch { /* bad VPA */ }
   }
+  // real social proof from completed visits (no fabricated reviews)
+  const { data: rated } = await db.from("bookings").select("rating").eq("tenant_id", tenant.id).eq("status", "completed").not("rating", "is", null);
+  const ratingCount = rated?.length ?? 0;
+  const ratingAvg = ratingCount ? (rated!.reduce((a, r) => a + Number(r.rating), 0) / ratingCount) : null;
+  const m = monogram(tenant.name);
+  const grouped = new Map<string, NonNullable<typeof services>>();
+  (services ?? []).forEach((sv) => grouped.set(sv.category, [...(grouped.get(sv.category) ?? []), sv]));
+  const selected = (services ?? []).find((sv) => sv.id === serviceId);
+  const input = "w-full rounded-xl border border-brand-200/80 bg-ivory-50 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-200";
   return (
-    <main className="mx-auto max-w-4xl px-4 py-8">
-      <Link href="/marketplace" className="text-sm text-brand-700">← Marketplace</Link>
-      <h1 className="mt-3 text-2xl font-bold">{tenant.name}</h1>
-      <p className="text-sm text-slate-500">{tenant.address} {tenant.city} · open {tenant.open_time.slice(0, 5)}–{tenant.close_time.slice(0, 5)}</p>
-      {tenant.description && <p className="mt-2 text-sm text-slate-600">{tenant.description}</p>}
-      {sp.error && <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{sp.error}</p>}
-      {booked && (
-        <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm">
-          <p className="font-semibold text-emerald-800">✅ Booked: {booked.services?.name} with {booked.staff?.name} on {fmtDateTime(booked.start_at)} — {inr(booked.price)} + GST</p>
-          {Number(booked.deposit_required) > 0 ? <p className="mt-1 text-amber-800">To hold this slot, please pay a deposit of {inr(booked.deposit_required)} via UPI (the salon has sent details on WhatsApp).</p> : <p className="mt-1 text-emerald-700">A confirmation will be sent to you on WhatsApp.</p>}
-          {payQr && (
-            <div className="mt-3 flex flex-wrap items-center gap-4">
-              <div className="h-[180px] w-[180px] rounded bg-white" dangerouslySetInnerHTML={{ __html: payQr.svg }} />
-              <div className="text-xs text-slate-600"><p>Scan with any UPI app, or on your phone:</p><a href={payQr.link} className="mt-1 inline-block rounded-lg bg-brand-600 px-3 py-1.5 font-medium text-white">Pay {inr(booked.deposit_required)} via UPI</a></div>
-            </div>
-          )}
+    <main>
+      <header className={`relative bg-gradient-to-br ${m.gradient} text-white`}>
+        <div className="salon-pattern absolute inset-0 opacity-50" aria-hidden />
+        <div className="relative mx-auto max-w-5xl px-4 pb-16 pt-5">
+          <Link href="/marketplace" className="inline-flex items-center gap-1 text-sm text-white/80 hover:text-white"><ArrowLeft className="h-4 w-4" />Marketplace</Link>
         </div>
-      )}
-      {(deals ?? []).length > 0 && (
-        <div className="mt-4 flex flex-wrap gap-2">{deals!.map((d, i) => <span key={i} className="rounded-full bg-pink-100 px-3 py-1 text-xs text-pink-800">🔥 {d.title}</span>)}</div>
-      )}
-      <div className="mt-6 grid gap-6 md:grid-cols-2">
-        <section>
-          <h2 className="mb-2 font-semibold">Services</h2>
-          <ul className="divide-y rounded-xl border bg-white">
-            {(services ?? []).map((s) => (
-              <li key={s.id} className="flex items-center justify-between gap-2 p-3 text-sm">
-                <div><p className="font-medium">{s.name}</p><p className="text-xs text-slate-500">{s.category} · {s.duration_min} min</p></div>
-                <div className="text-right"><p>{inr(s.base_price)}</p><Link href={`?service=${s.id}&date=${date}`} className="text-xs text-brand-600">Pick →</Link></div>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <section>
-          <h2 className="mb-2 font-semibold">Book</h2>
-          <form className="mb-3 flex gap-2 text-sm">
-            <select name="service" defaultValue={serviceId} className="flex-1 rounded-lg border px-2 py-1.5">{(services ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
-            <input type="date" name="date" defaultValue={date} min={todayIst()} className="rounded-lg border px-2 py-1.5" />
-            <button className="rounded-lg border px-3">Check</button>
-          </form>
-          {slots.length ? (
-            <form action={marketplaceBook} className="space-y-2 rounded-xl border bg-white p-4 text-sm">
-              <input type="hidden" name="slug" value={slug} /><input type="hidden" name="service_id" value={serviceId} /><input type="hidden" name="date" value={date} />
-              <div className="flex flex-wrap gap-2">
-                {slots.map((s) => {
-                  const tm = toIst(s.start).time;
-                  return (
-                    <label key={tm} className="cursor-pointer">
-                      <input type="radio" name="time" value={tm} defaultChecked={sp.time === tm} required className="peer hidden" />
-                      <span className="block rounded-lg border px-2 py-1 text-xs peer-checked:border-brand-600 peer-checked:bg-brand-50">{tm} · {inr(s.quote.price)}</span>
-                    </label>
-                  );
-                })}
+      </header>
+      <div className="relative z-10 mx-auto max-w-5xl px-4">
+        <div className="-mt-12 flex flex-wrap items-start gap-x-5 gap-y-2">
+          <span className={`grid h-24 w-24 place-items-center rounded-3xl border-4 border-ivory-100 bg-gradient-to-br font-display text-3xl font-semibold text-white shadow-lift ${m.gradient}`}>{m.initials}</span>
+          <div className="sm:pt-14">
+            <h1 className="font-display text-3xl font-semibold text-brand-900">{tenant.name}</h1>
+            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-brand-900/60">
+              {(tenant.address || tenant.city) && <span className="inline-flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{[tenant.address, tenant.city].filter(Boolean).join(", ")}</span>}
+              <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" />{tenant.open_time.slice(0, 5)}–{tenant.close_time.slice(0, 5)}</span>
+              {ratingAvg !== null && <span className="inline-flex items-center gap-1 text-gold-700"><Star className="h-3.5 w-3.5 fill-gold-400 text-gold-400" />{ratingAvg.toFixed(1)} · {ratingCount} rating{ratingCount === 1 ? "" : "s"}</span>}
+            </p>
+          </div>
+        </div>
+        {tenant.description && <p className="mt-4 max-w-2xl text-sm leading-relaxed text-brand-900/70">{tenant.description}</p>}
+        {sp.error && <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-800">{sp.error}</p>}
+        {booked && (
+          <div className="mt-5 animate-fade-in rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm">
+            <p className="flex items-center gap-2 font-semibold text-emerald-900"><CheckCircle2 className="h-5 w-5" />Booked: {booked.services?.name} with {booked.staff?.name} on {fmtDateTime(booked.start_at)} — {inr(booked.price)} + GST</p>
+            {Number(booked.deposit_required) > 0 ? <p className="mt-1 text-amber-800">To hold this slot, please pay a deposit of {inr(booked.deposit_required)} via UPI (the salon has sent details on WhatsApp).</p> : <p className="mt-1 text-emerald-800">A confirmation will be sent to you on WhatsApp.</p>}
+            {payQr && (
+              <div className="mt-4 flex flex-wrap items-center gap-5">
+                <div className="h-[180px] w-[180px] rounded-xl bg-white p-1 shadow-soft" dangerouslySetInnerHTML={{ __html: payQr.svg }} />
+                <div className="text-xs text-brand-900/70"><p>Scan with any UPI app, or on your phone:</p><a href={payQr.link} className="mt-2 inline-block rounded-xl bg-rose-gold px-4 py-2 font-medium text-white shadow-soft">Pay {inr(booked.deposit_required)} via UPI</a></div>
               </div>
-              <input name="name" required placeholder="Your name" className="w-full rounded-lg border px-2 py-1.5" />
-              <input name="phone" required placeholder="Mobile (WhatsApp)" className="w-full rounded-lg border px-2 py-1.5" />
-              <select name="language" className="w-full rounded-lg border px-2 py-1.5">{Object.entries(LANGUAGES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-              <label className="flex items-center gap-2 text-xs text-slate-500"><input type="checkbox" name="consent" defaultChecked /> Send me offers on WhatsApp (you can opt out anytime)</label>
-              <SubmitButton className="w-full">Confirm booking</SubmitButton>
-              <p className="text-[11px] text-slate-400">Prices are dynamic (demand-based) and exclude 18% GST.</p>
-            </form>
-          ) : <p className="rounded-xl border bg-white p-4 text-sm text-slate-500">No free slots on {date}. Try another date.</p>}
-        </section>
+            )}
+          </div>
+        )}
+        {(deals ?? []).length > 0 && (
+          <div className="mt-5 flex flex-wrap gap-2">{[...new Map(deals!.map((d) => [d.title, d])).values()].map((d, i) => <span key={i} className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700"><Ticket className="h-3 w-3" />{d.title}</span>)}</div>
+        )}
+        <div className="mt-8 grid gap-8 pb-28 lg:grid-cols-[1fr_380px]">
+          <section>
+            <h2 className="mb-4 font-display text-2xl font-semibold text-brand-900">Service menu</h2>
+            {[...grouped.entries()].map(([cat, list]) => {
+              const c = category(cat); const Icon = c.icon;
+              return (
+                <div key={cat} className="mb-6">
+                  <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-gold-700"><Icon className="h-4 w-4" />{c.label}</h3>
+                  <ul className="divide-y divide-brand-50 overflow-hidden rounded-2xl border border-brand-100 bg-white shadow-soft">
+                    {list.map((sv) => (
+                      <li key={sv.id} className={`flex items-center justify-between gap-3 p-4 text-sm ${sv.id === serviceId ? "bg-brand-50/60" : ""}`}>
+                        <div className="min-w-0"><p className="font-medium text-brand-900">{sv.name}</p>{sv.description && <p className="truncate text-xs text-brand-900/50">{sv.description}</p>}<p className="text-xs text-brand-900/45">{sv.duration_min} min</p></div>
+                        <div className="shrink-0 text-right"><p className="font-semibold text-brand-900">{inr(sv.base_price)}</p><Link href={`?service=${sv.id}&date=${date}#book`} className="text-xs font-medium text-brand-600 hover:underline">{sv.id === serviceId ? "Selected ✓" : "Pick →"}</Link></div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </section>
+          <section id="book" className="lg:sticky lg:top-6 lg:self-start">
+            <div className="rounded-2xl border border-brand-100 bg-white p-5 shadow-lift">
+              <h2 className="font-display text-xl font-semibold text-brand-900">Book</h2>
+              {selected && <p className="text-xs text-brand-900/55">{selected.name} · {selected.duration_min} min</p>}
+              <form className="mb-4 mt-3 grid grid-cols-[1fr_auto] gap-2 text-sm">
+                <select name="service" defaultValue={serviceId} className={`${input} col-span-2`} aria-label="Service">{(services ?? []).map((sv) => <option key={sv.id} value={sv.id}>{sv.name}</option>)}</select>
+                <input type="date" name="date" defaultValue={date} min={todayIst()} className={input} aria-label="Date" />
+                <button className="rounded-xl border border-brand-200 px-3 hover:bg-brand-50">Check</button>
+              </form>
+              {slots.length ? (
+                <form action={marketplaceBook} className="space-y-3 text-sm">
+                  <input type="hidden" name="slug" value={slug} /><input type="hidden" name="service_id" value={serviceId} /><input type="hidden" name="date" value={date} />
+                  <fieldset>
+                    <legend className="mb-2 text-xs font-medium text-brand-900/60">Choose a time</legend>
+                    <div className="grid grid-cols-3 gap-2">
+                      {slots.map((sl) => {
+                        const tm = toIst(sl.start).time;
+                        return (
+                          <label key={tm} className="cursor-pointer">
+                            <input type="radio" name="time" value={tm} defaultChecked={sp.time === tm} required className="peer sr-only" />
+                            <span className="block rounded-xl border border-brand-200 px-2 py-1.5 text-center text-xs transition peer-checked:border-brand-600 peer-checked:bg-rose-gold peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-brand-300 hover:border-brand-400">
+                              <span className="block font-semibold">{tm}</span><span className="opacity-75">{inr(sl.quote.price)}</span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+                  <input name="name" required placeholder="Your name" autoComplete="name" className={input} />
+                  <input name="phone" required placeholder="Mobile (WhatsApp)" autoComplete="tel" inputMode="tel" className={input} />
+                  <select name="language" className={input} aria-label="Preferred language">{Object.entries(LANGUAGES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+                  <label className="flex items-center gap-2 text-xs text-brand-900/55"><input type="checkbox" name="consent" defaultChecked /> Send me offers on WhatsApp (you can opt out anytime)</label>
+                  <SubmitButton className="w-full !py-2.5">Confirm booking</SubmitButton>
+                  <p className="text-center text-[11px] text-brand-900/40">Prices are dynamic (demand-based) and exclude 18% GST.</p>
+                </form>
+              ) : <p className="rounded-xl border border-dashed border-brand-200 bg-ivory-50 p-4 text-center text-sm text-brand-900/55">No free slots on {date}. Try another date.</p>}
+            </div>
+          </section>
+        </div>
       </div>
       <ChatWidget slug={slug} salon={tenant.name} />
     </main>

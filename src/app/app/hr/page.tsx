@@ -15,23 +15,23 @@ export default async function Hr({ searchParams }: { searchParams: Promise<Recor
   const sel = (cands ?? []).find((c) => c.id === sp.c);
   return (
     <>
-      <PageHeader title="Recruitment" subtitle="Post a role → the Recruitment Agent writes Naukri / Apna / Instagram / WhatsApp ads + sourcing search strings. Paste a resume → it's screened, scored, and a chat interview starts." />
+      <PageHeader eyebrow="Operations" title="Recruitment" subtitle="Post a role → the Recruitment Agent writes Naukri / Apna / Instagram / WhatsApp ads + sourcing search strings. Paste a resume → it's screened, scored, and a chat interview starts." />
       <Flash msg={sp.msg} error={sp.error} />
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Open roles" className="lg:col-span-2">
-          {(jobs ?? []).length === 0 && <p className="text-sm text-slate-400">No roles yet.</p>}
+          {(jobs ?? []).length === 0 && <p className="text-sm text-brand-900/40">No roles yet.</p>}
           <div className="space-y-3">
             {(jobs ?? []).map((j) => {
               const ads = j.ad_copy as Ads | null;
               return (
-                <details key={j.id} className="rounded-lg border p-3">
+                <details key={j.id} className="rounded-xl border border-brand-100 p-3">
                   <summary className="cursor-pointer text-sm"><b>{j.title}</b> · {j.location} · {j.salary_range} <Badge tone="green">{j.status}</Badge></summary>
                   {ads ? (
                     <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
-                      {(["naukri", "apna", "instagram", "whatsapp"] as const).map((k) => <div key={k} className="rounded bg-slate-50 p-2"><b className="uppercase text-slate-500">{k}</b><p className="whitespace-pre-wrap">{ads[k]}</p></div>)}
-                      <div className="rounded bg-slate-50 p-2 sm:col-span-2"><b className="uppercase text-slate-500">Sourcing search strings</b><ul>{ads.search_strings?.map((x, i) => <li key={i}><code>{x}</code></li>)}</ul></div>
+                      {(["naukri", "apna", "instagram", "whatsapp"] as const).map((k) => <div key={k} className="rounded bg-ivory-100 p-2"><b className="uppercase text-brand-900/55">{k}</b><p className="whitespace-pre-wrap">{ads[k]}</p></div>)}
+                      <div className="rounded bg-ivory-100 p-2 sm:col-span-2"><b className="uppercase text-brand-900/55">Sourcing search strings</b><ul>{ads.search_strings?.map((x, i) => <li key={i}><code>{x}</code></li>)}</ul></div>
                     </div>
-                  ) : <p className="mt-2 text-xs text-slate-400">Ads being generated…</p>}
+                  ) : <p className="mt-2 text-xs text-brand-900/40">Ads being generated…</p>}
                 </details>
               );
             })}
@@ -51,7 +51,7 @@ export default async function Hr({ searchParams }: { searchParams: Promise<Recor
           <Table head={["Name", "Role", "Source", "Score", "Status", ""]} empty="No candidates yet.">
             {(cands ?? []).map((c) => (
               <tr key={c.id} className={c.id === sp.c ? "bg-brand-50" : ""}>
-                <Td className="font-medium">{c.name}<div className="max-w-md text-xs font-normal text-slate-500">{c.summary}</div></Td>
+                <Td className="font-medium">{c.name}<div className="max-w-md text-xs font-normal text-brand-900/55">{c.summary}</div></Td>
                 <Td>{c.job_postings?.title ?? "—"}</Td><Td>{c.source}</Td><Td>{c.score ?? "…"}</Td><Td><Badge tone={statusTone(c.status)}>{c.status}</Badge></Td>
                 <Td><a href={`?c=${c.id}`} className="text-xs text-brand-600 hover:underline">Interview</a></Td>
               </tr>
@@ -72,9 +72,9 @@ export default async function Hr({ searchParams }: { searchParams: Promise<Recor
           <Card title={`Screening interview · ${sel.name}`} className="lg:col-span-3">
             <div className="mb-3 flex max-h-80 flex-col gap-2 overflow-y-auto">
               {(sel.screening_chat as { from: string; text: string }[]).map((m, i) => (
-                <div key={i} className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${m.from === "agent" ? "self-start bg-slate-100" : "self-end bg-brand-50"}`}>{m.text}</div>
+                <div key={i} className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${m.from === "agent" ? "self-start bg-brand-50" : "self-end bg-brand-50"}`}>{m.text}</div>
               ))}
-              {!(sel.screening_chat as unknown[]).length && <p className="text-sm text-slate-400">No interview (candidate {sel.status}).</p>}
+              {!(sel.screening_chat as unknown[]).length && <p className="text-sm text-brand-900/40">No interview (candidate {sel.status}).</p>}
             </div>
             <div className="flex flex-wrap gap-2">
               <form action={candidateReply} className="flex flex-1 gap-2">

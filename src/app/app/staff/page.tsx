@@ -21,7 +21,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
   const latest = runs?.[0];
   return (
     <>
-      <PageHeader title="Staff & Payroll" subtitle="Skill levels and specialties drive the matrix scheduler. Commission slabs are progressive (each slab % applies to revenue within it). Booth renters receive a revenue share instead." />
+      <PageHeader eyebrow="Operations" title="Staff & Payroll" subtitle="Skill levels and specialties drive the matrix scheduler. Commission slabs are progressive (each slab % applies to revenue within it). Booth renters receive a revenue share instead." />
       <Flash msg={sp.msg} error={sp.error} />
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Team" className="lg:col-span-2">
@@ -32,7 +32,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
                 <Td className="text-xs">{st.work_start.slice(0, 5)}–{st.work_end.slice(0, 5)}</Td>
                 <Td>{st.employment_type === "booth_renter" ? <Badge tone="violet">booth renter {100 - st.booth_rent_pct}% share</Badge> : <Badge>employee</Badge>}</Td>
                 <Td className="text-xs">{st.employment_type === "employee" ? `${inr(st.base_salary)} + ${st.commission_slabs.map((x: { upto: number | null; pct: number }) => `${x.pct}%${x.upto ? "≤" + x.upto / 1000 + "k" : "+"}`).join("/")}` : "—"}</Td>
-                <Td><form action={toggleStaff}><input type="hidden" name="id" value={st.id} /><input type="hidden" name="active" value={String(st.active)} /><button className="text-xs text-slate-500 hover:text-brand-600">{st.active ? "Deactivate" : "Activate"}</button></form></Td>
+                <Td><form action={toggleStaff}><input type="hidden" name="id" value={st.id} /><input type="hidden" name="active" value={String(st.active)} /><button className="text-xs text-brand-900/55 hover:text-brand-600">{st.active ? "Deactivate" : "Activate"}</button></form></Td>
               </tr>
             ))}
           </Table>
@@ -65,11 +65,11 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
           </form>
           {latest ? (
             <>
-              <p className="mb-2 text-xs text-slate-500">Latest run {fmtDate(latest.period_start)} → {fmtDate(latest.period_end)} · total <b>{inr(latest.total)}</b></p>
+              <p className="mb-2 text-xs text-brand-900/55">Latest run {fmtDate(latest.period_start)} → {fmtDate(latest.period_end)} · total <b>{inr(latest.total)}</b></p>
               <Table head={["Staff", "Service rev", "Product rev", "Base", "Svc comm.", "Prod comm.", "Tips", "Penalty", "PF / ESI / PT", "Net pay", "Employer cost"]}>
                 {(latest.lines as Line[]).map((l, i) => (
                   <tr key={i}>
-                    <Td className="font-medium">{l.name}<div className="text-[11px] font-normal text-slate-500">{l.breakdown.map((b) => `${b.range}: ₹${b.amount}`).join(" · ")}</div></Td>
+                    <Td className="font-medium">{l.name}<div className="text-[11px] font-normal text-brand-900/55">{l.breakdown.map((b) => `${b.range}: ₹${b.amount}`).join(" · ")}</div></Td>
                     <Td>{inr(l.service_revenue)}</Td><Td>{inr(l.product_revenue)}</Td><Td>{inr(l.base)}</Td>
                     <Td>{l.type === "booth_renter" ? inr(l.booth_payout) : inr(l.service_commission)}</Td><Td>{inr(l.product_commission)}</Td>
                     <Td>{inr(l.tips)}</Td><Td>{inr(l.penalties)}</Td>
@@ -79,7 +79,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
                 ))}
               </Table>
             </>
-          ) : <p className="text-sm text-slate-400">No payroll runs yet.</p>}
+          ) : <p className="text-sm text-brand-900/40">No payroll runs yet.</p>}
         </Card>
         <div className="space-y-4">
           <Card title="Tips, penalties, bonuses">
@@ -90,10 +90,10 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
               <Field label="Note" className="col-span-2"><Input name="note" /></Field>
               <div className="col-span-2"><SubmitButton>Record</SubmitButton></div>
             </form>
-            <ul className="mt-3 space-y-1 text-xs text-slate-600">{(adj ?? []).map((a) => <li key={a.id}>{a.staff?.name}: {a.kind} {inr(a.amount)} {a.note && `· ${a.note}`}</li>)}</ul>
+            <ul className="mt-3 space-y-1 text-xs text-brand-900/65">{(adj ?? []).map((a) => <li key={a.id}>{a.staff?.name}: {a.kind} {inr(a.amount)} {a.note && `· ${a.note}`}</li>)}</ul>
           </Card>
           <Card title="Stylist calendar feeds (Google / Apple / Outlook)">
-            <p className="mb-2 text-xs text-slate-500">Each stylist subscribes once (Google Calendar → Other calendars → From URL); bookings and leave sync automatically. Keep links private.</p>
+            <p className="mb-2 text-xs text-brand-900/55">Each stylist subscribes once (Google Calendar → Other calendars → From URL); bookings and leave sync automatically. Keep links private.</p>
             <ul className="space-y-1 text-xs">{(staff ?? []).filter((s) => s.active).map((s) => <li key={s.id}><b>{s.name}</b>: <code className="break-all">{`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/ics/${s.calendar_token}.ics`}</code></li>)}</ul>
           </Card>
           <Card title="Leave & blocked time">
@@ -110,12 +110,12 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
           </Card>
           <Card title="Micro-learning (assigned by Performance Coach Agent)">
             {(learning ?? []).length ? (
-              <ul className="space-y-2 text-sm">{(learning ?? []).map((l) => <li key={l.id}><b>{l.staff?.name}</b> → {l.module}<div className="text-xs text-slate-500">{l.reason}</div></li>)}</ul>
-            ) : <p className="text-sm text-slate-400">None yet. The agent assigns modules when it sees low ratings, waste flags or low utilisation.</p>}
+              <ul className="space-y-2 text-sm">{(learning ?? []).map((l) => <li key={l.id}><b>{l.staff?.name}</b> → {l.module}<div className="text-xs text-brand-900/55">{l.reason}</div></li>)}</ul>
+            ) : <p className="text-sm text-brand-900/40">None yet. The agent assigns modules when it sees low ratings, waste flags or low utilisation.</p>}
           </Card>
         </div>
       </div>
-      <p className="mt-4 text-xs text-slate-400">Tip: the payroll period defaults to month-to-date ({addDays(today, 0).slice(0, 8)}01 → {today}).</p>
+      <p className="mt-4 text-xs text-brand-900/40">Tip: the payroll period defaults to month-to-date ({addDays(today, 0).slice(0, 8)}01 → {today}).</p>
     </>
   );
 }

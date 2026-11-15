@@ -26,7 +26,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
   const { tenant } = await getTenantContext();
   return (
     <>
-      <PageHeader title="Settings" subtitle="Salon profile (also your public marketplace page) and the parameters agents operate within. The Self-Optimizing Agent tunes some of these automatically from your data." />
+      <PageHeader eyebrow="AI" title="Settings" subtitle="Salon profile (also your public marketplace page) and the parameters agents operate within. The Self-Optimizing Agent tunes some of these automatically from your data." />
       <Flash msg={sp.msg} error={sp.error} />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Salon profile">
@@ -55,11 +55,11 @@ export default async function Settings({ searchParams }: { searchParams: Promise
             </form>
           </Card>
           <Card title="AI search index">
-            <p className="mb-2 text-sm text-slate-600">Active embedding model: <code>{embeddingModel()}</code>. Re-index after adding a GEMINI_API_KEY to upgrade from local hashed embeddings to semantic embeddings.</p>
+            <p className="mb-2 text-sm text-brand-900/65">Active embedding model: <code>{embeddingModel()}</code>. Re-index after adding a GEMINI_API_KEY to upgrade from local hashed embeddings to semantic embeddings.</p>
             <form action={reindexServices}><SubmitButton variant="secondary">Re-index services</SubmitButton></form>
           </Card>
           <Card title="Security & compliance">
-            <ul className="list-disc space-y-1 pl-4 text-xs text-slate-600">
+            <ul className="list-disc space-y-1 pl-4 text-xs text-brand-900/65">
               <li>Tenant isolation enforced in Postgres Row-Level Security on every table.</li>
               <li>Encryption: TLS in transit; AES-256 at rest (Supabase managed storage).</li>
               <li>DPDP: marketing consent per client, data export and right-to-erasure on the Clients page.</li>

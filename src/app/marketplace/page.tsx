@@ -1,9 +1,15 @@
 import Link from "next/link";
+import { MapPin, Store, Ticket } from "lucide-react";
 import { botClient } from "@/lib/supabase/bot";
 import { fmtDateTime } from "@/lib/time";
+import { monogram } from "@/lib/ui/categories";
+import { Logo } from "@/components/Logo";
 import { SearchBox } from "./SearchBox";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Find a salon" };
+
+const KIND: Record<string, string> = { offpeak: "Off-peak", last_minute: "Last-minute", festival: "Festival", flash: "Flash", manual: "Offer" };
 
 export default async function Marketplace() {
   let deals: { id: string; title: string; description: string | null; discount_pct: number; kind: string; valid_to: string; tenants: { name: string; slug: string; city: string | null } | null }[] = [];
@@ -18,43 +24,63 @@ export default async function Marketplace() {
     salons = s.data ?? [];
   } catch { /* not configured */ }
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8">
-      <nav className="mb-8 flex items-center justify-between">
-        <Link href="/" className="text-lg font-bold text-brand-700">✂️ SalonMind</Link>
-        <Link href="/signup" className="text-sm text-slate-600 hover:text-brand-600">List your salon →</Link>
-      </nav>
-      <h1 className="text-2xl font-bold">Find your next salon visit</h1>
-      <p className="mb-4 text-sm text-slate-500">Ask in plain language (English, Hindi, Tamil…) or upload a photo of a look you love.</p>
-      <SearchBox />
-      <section className="mt-10">
-        <h2 className="mb-3 font-semibold">🔥 Live deals across India</h2>
-        {deals.length ? (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {deals.map((d) => (
-              <Link key={d.id} href={`/s/${d.tenants?.slug}`} className="rounded-xl border bg-white p-4 shadow-sm hover:border-brand-500">
-                <div className="flex justify-between text-xs"><span className="rounded-full bg-pink-100 px-2 py-0.5 text-pink-800">{d.kind.replace("_", "-")}</span>{d.discount_pct > 0 && <b className="text-brand-700">{d.discount_pct}% off</b>}</div>
-                <p className="mt-2 font-medium">{d.title}</p>
-                <p className="text-xs text-slate-500">{d.tenants?.name} · {d.tenants?.city}</p>
-                <p className="mt-1 text-xs text-slate-500">{d.description}</p>
-                <p className="mt-1 text-[11px] text-slate-400">until {fmtDateTime(d.valid_to)}</p>
-              </Link>
-            ))}
-          </div>
-        ) : <p className="text-sm text-slate-400">No live deals right now — salons' Yield Agents publish them as slots open up.</p>}
+    <main>
+      <section className="relative bg-plum-gradient text-white">
+        <div className="salon-pattern absolute inset-0 opacity-50" aria-hidden />
+        <div className="relative mx-auto max-w-5xl px-4 pb-10 pt-6">
+          <nav className="mb-10 flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-2"><Logo className="h-8 w-8" /><span className="font-display text-lg font-semibold">SalonMind</span></Link>
+            <Link href="/signup" className="rounded-xl border border-white/25 bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20">List your salon →</Link>
+          </nav>
+          <h1 className="font-display text-3xl font-semibold sm:text-5xl">Find your next salon visit</h1>
+          <p className="mt-2 text-brand-100/80">Ask in plain language — English, हिंदी, தமிழ் … — or upload a photo of a look you love.</p>
+          <div className="mt-6"><SearchBox /></div>
+        </div>
       </section>
-      <section className="mt-10">
-        <h2 className="mb-3 font-semibold">Salons</h2>
-        {salons.length ? (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {salons.map((s) => (
-              <Link key={s.id} href={`/s/${s.slug}`} className="rounded-xl border bg-white p-4 shadow-sm hover:border-brand-500">
-                <p className="font-medium">{s.name}</p><p className="text-xs text-slate-500">{s.city}</p>
-                <p className="mt-1 line-clamp-2 text-xs text-slate-500">{s.description}</p>
-              </Link>
-            ))}
-          </div>
-        ) : <p className="text-sm text-slate-400">No salons listed yet.</p>}
-      </section>
+      <div className="mx-auto max-w-5xl px-4 py-10">
+        <section>
+          <h2 className="mb-4 flex items-center gap-2 font-display text-2xl font-semibold text-brand-900"><Ticket className="h-5 w-5 text-rose-500" />Live deals across India</h2>
+          {deals.length ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {deals.map((d) => (
+                <Link key={d.id} href={`/s/${d.tenants?.slug}`} className="group relative flex overflow-hidden rounded-2xl border border-brand-100 bg-white shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift">
+                  <div className="flex w-20 shrink-0 flex-col items-center justify-center bg-rose-gold text-white">
+                    {d.discount_pct > 0 ? <><span className="font-display text-2xl font-semibold">{d.discount_pct}%</span><span className="text-[10px] uppercase tracking-wider">off</span></> : <span className="px-1 text-center text-[10px] font-semibold uppercase tracking-wider">{KIND[d.kind] ?? "Deal"}</span>}
+                  </div>
+                  <div className="relative flex-1 border-l-2 border-dashed border-brand-100 p-4">
+                    <span className="absolute -left-2 -top-2 h-4 w-4 rounded-full bg-ivory-100" aria-hidden /><span className="absolute -bottom-2 -left-2 h-4 w-4 rounded-full bg-ivory-100" aria-hidden />
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gold-600">{KIND[d.kind] ?? d.kind}</p>
+                    <p className="mt-0.5 font-medium text-brand-900">{d.title}</p>
+                    <p className="mt-1 flex items-center gap-1 text-xs text-brand-900/55"><Store className="h-3 w-3" />{d.tenants?.name}{d.tenants?.city && <> · <MapPin className="h-3 w-3" />{d.tenants.city}</>}</p>
+                    <p className="mt-1 text-[11px] text-brand-900/40">until {fmtDateTime(d.valid_to)}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : <p className="rounded-2xl border border-dashed border-brand-200 bg-white p-6 text-center text-sm text-brand-900/50">No live deals right now — each salon&apos;s Yield Agent publishes them as slots open up.</p>}
+        </section>
+        <section className="mt-12">
+          <h2 className="mb-4 flex items-center gap-2 font-display text-2xl font-semibold text-brand-900"><Store className="h-5 w-5 text-brand-500" />Salons</h2>
+          {salons.length ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {salons.map((s) => {
+                const m = monogram(s.name);
+                return (
+                  <Link key={s.id} href={`/s/${s.slug}`} className="group overflow-hidden rounded-2xl border border-brand-100 bg-white shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift">
+                    <div className={`relative h-24 bg-gradient-to-br ${m.gradient}`}><div className="salon-pattern absolute inset-0 opacity-40" /></div>
+                    <div className="-mt-8 px-4 pb-4">
+                      <span className={`grid h-14 w-14 place-items-center rounded-2xl border-4 border-white bg-gradient-to-br font-display text-lg font-semibold text-white shadow-soft ${m.gradient}`}>{m.initials}</span>
+                      <p className="mt-2 font-semibold text-brand-900 group-hover:text-brand-600">{s.name}</p>
+                      <p className="flex items-center gap-1 text-xs text-brand-900/55"><MapPin className="h-3 w-3" />{s.city}</p>
+                      {s.description && <p className="mt-1.5 line-clamp-2 text-xs text-brand-900/60">{s.description}</p>}
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : <p className="rounded-2xl border border-dashed border-brand-200 bg-white p-6 text-center text-sm text-brand-900/50">No salons listed yet.</p>}
+        </section>
+      </div>
     </main>
   );
 }

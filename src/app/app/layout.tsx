@@ -1,37 +1,39 @@
 import Link from "next/link";
+import { ExternalLink, LogOut, Plus } from "lucide-react";
 import { getTenantContext } from "@/lib/tenant";
 import { signOut, switchSalon } from "../auth-actions";
 import { aiEnabled } from "@/lib/ai/llm";
-import { NavLinks } from "./NavLinks";
+import { Sidebar } from "./Sidebar";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { tenant, salons, user } = await getTenantContext();
+  const footer = (
+    <div className="space-y-2">
+      <p className="flex items-center gap-1.5">
+        <span className={`h-2 w-2 rounded-full ${aiEnabled() ? "bg-emerald-400" : "bg-gold-400"}`} aria-hidden />
+        {aiEnabled() ? "AI models connected" : "Rules mode · add a free AI key"}
+      </p>
+      {salons.length > 1 && (
+        <form action={switchSalon} className="flex gap-1">
+          <select name="tenant_id" defaultValue={tenant.id} className="w-full rounded-lg border border-white/15 bg-white/10 px-2 py-1 text-white [&>option]:text-brand-900">
+            {salons.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          <button className="rounded-lg border border-white/15 px-2 hover:bg-white/10">Go</button>
+        </form>
+      )}
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+        <Link href={`/s/${tenant.slug}`} target="_blank" className="inline-flex items-center gap-1 hover:text-gold-300"><ExternalLink className="h-3 w-3" />Public page</Link>
+        <Link href="/onboarding" className="inline-flex items-center gap-1 hover:text-gold-300"><Plus className="h-3 w-3" />New salon</Link>
+        <form action={signOut}><button className="inline-flex items-center gap-1 hover:text-gold-300" title={user.email ?? ""}><LogOut className="h-3 w-3" />Sign out</button></form>
+      </div>
+    </div>
+  );
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
-      <aside className="no-print border-b border-slate-200 bg-white md:sticky md:top-0 md:h-screen md:w-56 md:shrink-0 md:overflow-y-auto md:border-b-0 md:border-r">
-        <div className="flex items-center justify-between p-4 md:block">
-          <Link href="/app" className="text-lg font-bold text-brand-700">✂️ SalonMind</Link>
-          <p className="truncate text-xs text-slate-500 md:mt-1">{tenant.name}</p>
-        </div>
-        <NavLinks />
-        <div className="space-y-2 border-t p-3 text-xs text-slate-500">
-          <p>AI: {aiEnabled() ? <span className="text-emerald-600">LLM connected</span> : <span className="text-amber-600">rules-engine mode</span>}</p>
-          {salons.length > 1 && (
-            <form action={switchSalon} className="flex gap-1">
-              <select name="tenant_id" defaultValue={tenant.id} className="w-full rounded border px-1 py-0.5">
-                {salons.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-              <button className="rounded border px-1">Go</button>
-            </form>
-          )}
-          <p className="truncate">{user.email}</p>
-          <div className="flex gap-3">
-            <Link href="/onboarding" className="hover:text-brand-600">+ New salon</Link>
-            <form action={signOut}><button className="hover:text-brand-600">Sign out</button></form>
-          </div>
-        </div>
-      </aside>
-      <main className="min-w-0 flex-1 p-4 md:p-6">{children}</main>
+      <Sidebar salon={tenant.name} footer={footer} />
+      <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 md:px-8 md:py-8">
+        <div className="mx-auto max-w-[1400px] animate-fade-in">{children}</div>
+      </main>
     </div>
   );
 }

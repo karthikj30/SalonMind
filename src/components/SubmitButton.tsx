@@ -1,16 +1,19 @@
 "use client";
 import { useFormStatus } from "react-dom";
+import { Loader2 } from "lucide-react";
 
-export function SubmitButton({ children, variant = "primary", className = "", pendingText }: { children: React.ReactNode; variant?: "primary" | "secondary" | "danger" | "ghost"; className?: string; pendingText?: string }) {
+const V = {
+  primary: "bg-rose-gold text-white shadow-soft hover:shadow-lift hover:brightness-110",
+  secondary: "border border-brand-200 bg-white text-brand-800 hover:border-brand-300 hover:bg-brand-50",
+  danger: "bg-red-600 text-white hover:bg-red-700",
+  ghost: "text-brand-700 hover:bg-brand-50",
+};
+
+export function SubmitButton({ children, variant = "primary", className = "", pendingText }: { children: React.ReactNode; variant?: keyof typeof V; className?: string; pendingText?: string }) {
   const { pending } = useFormStatus();
-  const v = {
-    primary: "bg-brand-600 text-white hover:bg-brand-700",
-    secondary: "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
-    danger: "bg-red-600 text-white hover:bg-red-700",
-    ghost: "text-slate-600 hover:bg-slate-100",
-  }[variant];
   return (
-    <button type="submit" disabled={pending} className={`inline-flex items-center justify-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-60 ${v} ${className}`}>
+    <button type="submit" disabled={pending} aria-busy={pending} className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-medium transition disabled:cursor-wait disabled:opacity-70 ${V[variant]} ${className}`}>
+      {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
       {pending ? (pendingText ?? "Working…") : children}
     </button>
   );

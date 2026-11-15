@@ -2,5 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
-body { @apply bg-slate-50 text-slate-900 antialiased; }
+@layer base {
+  body { @apply bg-ivory-100 text-brand-950 antialiased; }
+  h1, h2, h3 { @apply tracking-tight; }
+  /* Playfair defaults to old-style figures (0 looks like o) — use lining numerals for prices */
+  .font-display { font-variant-numeric: lining-nums; }
+  ::selection { @apply bg-rose-200 text-brand-900; }
+  input[type="checkbox"], input[type="radio"] { accent-color: #7e3f75; }
+}
+
+@layer components {
+  /* subtle salon pattern (scissors-and-comb dots) for hero areas */
+  .salon-pattern {
+    background-image: radial-gradient(rgba(201,160,67,.18) 1px, transparent 1px), radial-gradient(rgba(201,160,67,.10) 1px, transparent 1px);
+    background-size: 22px 22px, 22px 22px; background-position: 0 0, 11px 11px;
+  }
+  .gold-rule { @apply h-px bg-gradient-to-r from-transparent via-gold-400 to-transparent; }
+  .skeleton { @apply relative overflow-hidden rounded-xl bg-brand-100/60; }
+  .skeleton::after { content: ""; @apply absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/60 to-transparent; animation: shimmer 1.4s infinite; }
+}
+
 @media print { .no-print { display: none !important; } body { background: white; } }

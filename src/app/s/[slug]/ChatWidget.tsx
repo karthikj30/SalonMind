@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { MessageCircle, Send, X } from "lucide-react";
 
 export function ChatWidget({ slug, salon }: { slug: string; salon: string }) {
   const [open, setOpen] = useState(false);
@@ -7,6 +8,8 @@ export function ChatWidget({ slug, salon }: { slug: string; salon: string }) {
   const [msgs, setMsgs] = useState<{ from: "me" | "ai"; text: string }[]>([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const end = useRef<HTMLDivElement>(null);
+  useEffect(() => end.current?.scrollIntoView({ behavior: "smooth" }), [msgs, busy]);
   useEffect(() => {
     try { setHandle(localStorage.getItem("sm_phone") ?? ""); } catch { /* ignore */ }
   }, []);
@@ -27,25 +30,29 @@ export function ChatWidget({ slug, salon }: { slug: string; salon: string }) {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-10 w-[min(360px,calc(100vw-2rem))]">
+    <div className="fixed bottom-4 right-4 z-30 w-[min(370px,calc(100vw-2rem))]">
       {open ? (
-        <div className="flex h-[460px] flex-col rounded-xl border bg-white shadow-xl">
-          <div className="flex items-center justify-between border-b px-3 py-2 text-sm"><b>Chat with {salon}</b><button onClick={() => setOpen(false)} className="text-slate-400">✕</button></div>
-          <div className="flex-1 space-y-2 overflow-y-auto p-3 text-sm">
-            <p className="text-xs text-slate-400">AI receptionist · any language · can check slots and book for you.</p>
-            {msgs.map((m, i) => <div key={i} className={`max-w-[85%] whitespace-pre-wrap rounded-xl px-3 py-2 ${m.from === "me" ? "ml-auto bg-brand-50" : "bg-slate-100"}`}>{m.text}</div>)}
-            {busy && <div className="w-16 rounded-xl bg-slate-100 px-3 py-2 text-slate-400">…</div>}
+        <div className="flex h-[480px] animate-fade-in flex-col overflow-hidden rounded-2xl border border-brand-100 bg-white shadow-lift" role="dialog" aria-label={`Chat with ${salon}`}>
+          <div className="flex items-center justify-between bg-plum-gradient px-4 py-3 text-white">
+            <div><p className="text-sm font-semibold">{salon}</p><p className="text-[11px] text-brand-100/80">AI receptionist · any language · books for you</p></div>
+            <button onClick={() => setOpen(false)} className="rounded-lg p-1 hover:bg-white/10" aria-label="Close chat"><X className="h-4 w-4" /></button>
           </div>
-          <form onSubmit={send} className="space-y-1 border-t p-2">
-            <input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="Your mobile (+91…)" className="w-full rounded border px-2 py-1 text-xs" required />
-            <div className="flex gap-1">
-              <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…" className="flex-1 rounded border px-2 py-1 text-sm" />
-              <button disabled={busy} className="rounded bg-brand-600 px-3 text-sm text-white disabled:opacity-50">Send</button>
+          <div className="flex-1 space-y-2 overflow-y-auto bg-ivory-50 p-3 text-sm" aria-live="polite">
+            {!msgs.length && <p className="rounded-xl bg-white p-3 text-xs text-brand-900/60 shadow-soft">Namaste! Ask about prices, free slots or book directly — e.g. “kal 6 baje haircut?”. I&apos;ll confirm before booking anything.</p>}
+            {msgs.map((m, i) => <div key={i} className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 ${m.from === "me" ? "ml-auto rounded-br-md bg-rose-gold text-white" : "rounded-bl-md bg-white text-brand-950 shadow-soft"}`}>{m.text}</div>)}
+            {busy && <div className="flex w-16 gap-1 rounded-2xl bg-white px-3 py-3 shadow-soft">{[0, 1, 2].map((d) => <span key={d} className="h-1.5 w-1.5 animate-bounce rounded-full bg-brand-300" style={{ animationDelay: `${d * 120}ms` }} />)}</div>}
+            <div ref={end} />
+          </div>
+          <form onSubmit={send} className="space-y-1.5 border-t border-brand-100 p-2">
+            <input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="Your mobile (+91…)" inputMode="tel" aria-label="Your mobile number" className="w-full rounded-lg border border-brand-100 bg-ivory-50 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-200" required />
+            <div className="flex gap-1.5">
+              <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a message…" aria-label="Message" className="flex-1 rounded-lg border border-brand-100 bg-ivory-50 px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-200" />
+              <button disabled={busy} className="grid w-10 place-items-center rounded-lg bg-rose-gold text-white disabled:opacity-50" aria-label="Send"><Send className="h-4 w-4" /></button>
             </div>
           </form>
         </div>
       ) : (
-        <button onClick={() => setOpen(true)} className="ml-auto block rounded-full bg-brand-600 px-4 py-3 text-sm font-medium text-white shadow-lg hover:bg-brand-700">💬 Chat & book</button>
+        <button onClick={() => setOpen(true)} className="ml-auto flex items-center gap-2 rounded-full bg-rose-gold px-5 py-3 text-sm font-medium text-white shadow-lift transition hover:brightness-110"><MessageCircle className="h-4 w-4" />Chat & book</button>
       )}
     </div>
   );

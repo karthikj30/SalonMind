@@ -17,7 +17,7 @@ export default async function Agents({ searchParams }: { searchParams: Promise<R
   const modules = [...new Set(AGENTS.map((a) => a.module))];
   return (
     <>
-      <PageHeader title="Agent Console" subtitle="Every agent, what it listens to, and everything it did. Agents talk asynchronously through the event bus (agent_events); the orchestrator runs periodic agents on a schedule (Supabase pg_cron → /api/agents/tick) or when you click Run.">
+      <PageHeader eyebrow="AI" title="Agent Console" subtitle="Every agent, what it listens to, and everything it did. Agents talk asynchronously through the event bus (agent_events); the orchestrator runs periodic agents on a schedule (Supabase pg_cron → /api/agents/tick) or when you click Run.">
         <form action={runAgentNow}><input type="hidden" name="agent" value="all" /><SubmitButton pendingText="Orchestrating…">▶ Run full orchestrator</SubmitButton></form>
         <form action={drainQueue}><SubmitButton variant="secondary">Retry / drain queue</SubmitButton></form>
       </PageHeader>
@@ -38,7 +38,7 @@ export default async function Agents({ searchParams }: { searchParams: Promise<R
                     <a href={`?agent=${a.id}`} className="font-medium hover:text-brand-600">{a.name}</a>
                     {a.periodic ? <form action={runAgentNow}><input type="hidden" name="agent" value={a.id} /><SubmitButton variant="secondary" className="!px-2 !py-0.5 text-xs">Run</SubmitButton></form> : <Badge>event-driven</Badge>}
                   </div>
-                  <p className="text-xs text-slate-500">{a.description}</p>
+                  <p className="text-xs text-brand-900/55">{a.description}</p>
                   {a.subscribes.length > 0 && <p className="mt-0.5 text-[11px] text-violet-700">listens: {a.subscribes.join(", ")}</p>}
                 </li>
               ))}
@@ -54,8 +54,8 @@ export default async function Agents({ searchParams }: { searchParams: Promise<R
                 <Td className="whitespace-nowrap text-xs">{fmtDateTime(r.created_at)}</Td>
                 <Td><Badge tone={r.status === "ok" ? "blue" : "red"}>{r.agent}</Badge></Td>
                 <Td className="text-xs">{r.trigger}</Td>
-                <Td><p className="text-sm">{r.summary}</p>{(r.actions as { label: string }[]).length > 0 && <ul className="mt-1 list-disc pl-4 text-xs text-slate-600">{(r.actions as { label: string }[]).map((a, i) => <li key={i}>{a.label}</li>)}</ul>}
-                  {r.output && <details className="text-[11px]"><summary className="cursor-pointer text-slate-400">output</summary><pre className="max-h-48 overflow-auto rounded bg-slate-50 p-1">{JSON.stringify(r.output, null, 1)}</pre></details>}</Td>
+                <Td><p className="text-sm">{r.summary}</p>{(r.actions as { label: string }[]).length > 0 && <ul className="mt-1 list-disc pl-4 text-xs text-brand-900/65">{(r.actions as { label: string }[]).map((a, i) => <li key={i}>{a.label}</li>)}</ul>}
+                  {r.output && <details className="text-[11px]"><summary className="cursor-pointer text-brand-900/40">output</summary><pre className="max-h-48 overflow-auto rounded bg-ivory-100 p-1">{JSON.stringify(r.output, null, 1)}</pre></details>}</Td>
                 <Td className="text-[11px]">{r.provider}</Td><Td className="text-xs">{r.duration_ms}</Td>
               </tr>
             ))}
@@ -66,11 +66,11 @@ export default async function Agents({ searchParams }: { searchParams: Promise<R
             {(events ?? []).map((e) => (
               <li key={e.id} className="rounded border px-2 py-1">
                 <div className="flex justify-between"><b>{e.type}</b><Badge tone={e.status === "done" ? "green" : e.status === "failed" ? "red" : "amber"}>{e.status}</Badge></div>
-                <div className="text-slate-500">from {e.source} · {fmtDateTime(e.created_at)}</div>
+                <div className="text-brand-900/55">from {e.source} · {fmtDateTime(e.created_at)}</div>
                 {e.error && <div className="text-red-600">{e.error}</div>}
               </li>
             ))}
-            {!events?.length && <li className="text-slate-400">No events yet.</li>}
+            {!events?.length && <li className="text-brand-900/40">No events yet.</li>}
           </ul>
         </Card>
       </div>
