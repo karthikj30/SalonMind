@@ -22,14 +22,21 @@ function Buttons({ reply, inbound }: { reply: Action; inbound: Action }) {
 }
 
 /** WhatsApp-style composer: green button replies as the salon, phone button simulates the customer's next message. */
-export function Composer({ handle, channel, clientId, name, reply, inbound }: { handle: string; channel: string; clientId: string; name: string; reply: Action; inbound: Action }) {
+export function Composer({ handle, channel, clientId, name, reply, inbound, translateTo, translateLabel, tr }: { handle: string; channel: string; clientId: string; name: string; reply: Action; inbound: Action; translateTo?: string | null; translateLabel?: string; tr?: string }) {
   const ta = useRef<HTMLTextAreaElement>(null);
   return (
-    <form action={reply} className="flex items-end gap-2 bg-[var(--wa-panel)] px-2 py-2 sm:px-3" onSubmit={() => setTimeout(() => { if (ta.current) ta.current.value = ""; }, 0)}>
+    <form action={reply} className="flex flex-wrap items-end gap-x-2 gap-y-1 bg-[var(--wa-panel)] px-2 py-2 sm:px-3" onSubmit={() => setTimeout(() => { if (ta.current) ta.current.value = ""; }, 0)}>
       <input type="hidden" name="handle" value={handle} />
       <input type="hidden" name="channel" value={channel} />
       <input type="hidden" name="client_id" value={clientId} />
       <input type="hidden" name="name" value={name} />
+      <input type="hidden" name="tr" value={tr ?? ""} />
+      {translateTo && (
+        <label className="flex w-full cursor-pointer items-center gap-1.5 px-2 text-[12px] text-[var(--wa-meta)]">
+          <input type="checkbox" name="translate_to" value={translateTo} defaultChecked className="h-3.5 w-3.5" />
+          Send my reply in {translateLabel} — type in any language, it is translated before sending
+        </label>
+      )}
       <textarea ref={ta} name="body" required rows={1} dir="auto" maxLength={2000} placeholder="Type a message"
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}
         className="max-h-32 min-h-11 flex-1 resize-none rounded-3xl border-0 bg-[var(--wa-in)] px-4 py-2.5 text-[15px] text-[var(--wa-text)] placeholder:text-[var(--wa-meta)] focus:outline-none focus:ring-2 focus:ring-[#00a88466]" />

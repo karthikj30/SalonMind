@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Bot, Check, CheckCheck, Clock, Lock, MessageSquarePlus, Search, UserRound } from "lucide-react";
+import { ArrowLeft, Bot, Check, CheckCheck, Clock, Languages, Lock, MessageSquarePlus, Search, UserRound } from "lucide-react";
 import { getTenantContext } from "@/lib/tenant";
 import { Field, Flash, Input, Select, Textarea } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -7,6 +7,9 @@ import { manualReply, setConversationStatus, simulateInbound } from "../actions"
 import { toIst, todayIst, addDays } from "@/lib/time";
 import { LANGUAGES } from "@/lib/ai/llm";
 import { Composer } from "./Composer";
+import { translateBatch } from "@/lib/ai/translate";
+import { detectLang } from "@/lib/i18n/concierge";
+import { isTLang, sourceHash } from "@/lib/domain/translate";
 
 const CH: Record<string, { label: string; icon: string; color: string }> = {
   whatsapp: { label: "WhatsApp", icon: "🟢", color: "#25d366" },
@@ -74,10 +77,32 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Re
   const cur = active ? threads.get(active) : undefined;
   const thread = (msgs ?? []).filter((m) => (m.contact_handle ?? "unknown") === active).reverse();
   const last = thread[thread.length - 1];
-  const lang = [...thread].reverse().find((m) => m.direction === "in" && m.meta?.language)?.meta?.language as string | undefined;
+  const lastIn = [...thread].reverse().find((m) => m.direction === "in");
+  const lang = ([...thread].reverse().find((m) => m.direction === "in" && m.meta?.language)?.meta?.language as string | undefined) ?? (lastIn ? detectLang(lastIn.body) : undefined);
   const title = cur?.name ?? active ?? "";
+
+  // Translate toggle: customer messages in another language are shown in the reader's language underneath.
+  // Results are cached privately for this salon (translations.is_public = false) so each message is translated once.
+  const tr = isTLang(sp.tr) ? sp.tr : null;
+  const shown = new Map<string, string>();
+  if (tr && thread.length) {
+    const foreign = [...new Set(thread.filter((m) => m.direction === "in" && detectLang(m.body) !== tr && /\p{L}/u.test(m.body)).map((m) => m.body.trim()))].slice(-40);
+    if (foreign.length) {
+      const { data: cached } = await db.from("translations").select("source_hash, text").eq("tenant_id", tenant.id).eq("lang", tr).in("source_hash", foreign.map(sourceHash));
+      (cached ?? []).forEach((r) => shown.set(r.source_hash, r.text));
+      const missing = foreign.filter((b) => !shown.has(sourceHash(b)));
+      if (missing.length) {
+        const out = await translateBatch(missing, tr);
+        const rows = out.map((t, i) => ({ t, src: missing[i] })).filter((x) => x.t.provider !== "none" && x.t.provider !== "same-language")
+          .map((x) => ({ tenant_id: tenant.id, lang: tr, source_hash: sourceHash(x.src), source_text: x.src, text: x.t.text, provider: x.t.provider, is_public: false }));
+        rows.forEach((r) => shown.set(r.source_hash, r.text));
+        if (rows.length) await db.from("translations").upsert(rows, { onConflict: "tenant_id,lang,source_hash" });
+      }
+    }
+  }
+  const replyLang = lang && lang !== "en" && isTLang(lang) ? lang : null;
   const qs = (o: Record<string, string | undefined>) => {
-    const p = new URLSearchParams(Object.entries({ f: filter === "all" ? undefined : filter, q: sp.q, ...o }).filter(([, v]) => v) as [string, string][]);
+    const p = new URLSearchParams(Object.entries({ f: filter === "all" ? undefined : filter, q: sp.q, tr: sp.tr, ...o }).filter(([, v]) => v) as [string, string][]);
     const s = p.toString();
     return s ? `?${s}` : "?";
   };
@@ -180,6 +205,9 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Re
                     {(CH[last?.channel ?? "web"] ?? CH.web).label}{title !== active && ` · ${active}`}{lang && ` · ${LANGUAGES[lang] ?? lang}`} · {human.has(active) ? `👤 ${human.get(active) ?? "staff"}` : "🤖 AI concierge"}
                   </p>
                 </div>
+                <Link href={qs({ h: active, tr: tr ? undefined : "en" })} scroll={false} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-xs font-medium ${tr ? "border-transparent bg-[var(--wa-send)] text-white" : "border-[var(--wa-line)] bg-[var(--wa-in)] text-[var(--wa-text)] hover:bg-[var(--wa-active)]"}`} title={tr ? "Hide translations" : "Show customer messages in English"} aria-pressed={Boolean(tr)}>
+                  <Languages className="h-3.5 w-3.5" /><span className="hidden sm:inline">{tr ? "Translated" : "Translate"}</span>
+                </Link>
                 <form action={setConversationStatus}>
                   <input type="hidden" name="handle" value={active} /><input type="hidden" name="status" value={human.has(active) ? "ai" : "human"} />
                   <button className="inline-flex items-center gap-1 rounded-full border border-[var(--wa-line)] bg-[var(--wa-in)] px-2.5 py-1.5 text-xs font-medium text-[var(--wa-text)] hover:bg-[var(--wa-active)]" title={human.has(active) ? "Let the AI concierge reply again" : "Pause the AI and reply yourself"}>
@@ -209,6 +237,8 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Re
                         <div className={`wa-bubble animate-fade-up ${out ? "wa-out self-end" : "wa-in self-start"} ${tail ? "wa-tail mt-1.5" : ""}`}>
                           {out && tail && <p className="mb-0.5 text-[11.5px] font-medium" style={{ color: m.agent === "human" ? "#7f66ff" : "#00a884" }}>{m.agent === "human" ? "👤 You" : `🤖 ${m.agent ?? "AI"}`}</p>}
                           <p className="whitespace-pre-wrap text-[14.5px] leading-snug" dir="auto">{m.body}</p>
+                          {!out && shown.has(sourceHash(m.body)) && <p className="mt-1 whitespace-pre-wrap border-t border-black/10 pt-1 text-[13px] italic leading-snug opacity-80 dark:border-white/15" dir="auto" data-translation>🌐 {shown.get(sourceHash(m.body))}</p>}
+                          {out && typeof m.meta?.original === "string" && <p className="mt-1 whitespace-pre-wrap border-t border-black/10 pt-1 text-[12.5px] italic leading-snug opacity-70 dark:border-white/15" dir="auto">You wrote: {m.meta.original}</p>}
                           <p className="wa-meta mt-0.5 flex flex-wrap items-center justify-end gap-1 text-[11px]">
                             {!out && m.meta?.intent && <span className="mr-auto rounded bg-black/5 px-1 dark:bg-white/10">{LANGUAGES[String(m.meta.language)] ?? String(m.meta.language ?? "")} · {String(m.meta.intent)}</span>}
                             {(CH[m.channel] ?? CH.web).icon} {clock(m.created_at)} {out && <Ticks status={m.status} />}
@@ -220,7 +250,8 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Re
                 </div>
               </div>
 
-              <Composer handle={active} channel={last?.channel ?? "whatsapp"} clientId={last?.client_id ?? ""} name={cur.name ?? ""} reply={manualReply} inbound={simulateInbound} />
+              <Composer handle={active} channel={last?.channel ?? "whatsapp"} clientId={last?.client_id ?? ""} name={cur.name ?? ""} reply={manualReply} inbound={simulateInbound}
+                translateTo={replyLang} translateLabel={replyLang ? LANGUAGES[replyLang] ?? replyLang : ""} tr={tr ?? ""} />
             </>
           )}
         </section>

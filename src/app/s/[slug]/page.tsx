@@ -16,6 +16,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguagePicker } from "@/components/LanguagePicker";
 import { getDict } from "@/lib/i18n/server";
 import { isRtl } from "@/lib/i18n/ui";
+import { loadTranslations } from "@/lib/agents/i18n";
 import { fill } from "@/lib/i18n/ui";
 import { ArrowLeft, CheckCircle2, Clock, MapPin, Star, Ticket } from "lucide-react";
 
@@ -40,6 +41,7 @@ export default async function SalonPage({ params, searchParams }: { params: Prom
     db.from("services").select("id, name, category, description, base_price, duration_min").eq("tenant_id", tenant.id).eq("active", true).order("category"),
     db.from("deals").select("title, description, discount_pct, valid_to, service_id").eq("tenant_id", tenant.id).eq("active", true).gte("valid_to", new Date().toISOString()),
   ]);
+  const L = await loadTranslations(db, lang === "en" ? [] : [tenant.id], lang); // stored by the Translator Agent
   const serviceId = sp.service ?? services?.[0]?.id;
   const date = sp.date && sp.date !== "null" ? sp.date : todayIst();
   const plan = serviceId ? await planBooking(db, tenant, { service_id: serviceId, date }, 12).catch(() => null) : null;
@@ -80,7 +82,7 @@ export default async function SalonPage({ params, searchParams }: { params: Prom
             </p>
           </div>
         </div>
-        {tenant.description && <p dir="auto" className="mt-4 max-w-2xl text-sm leading-relaxed text-brand-900/70">{tenant.description}</p>}
+        {tenant.description && <p dir="auto" className="mt-4 max-w-2xl text-sm leading-relaxed text-brand-900/70">{L(tenant.description)}</p>}
         {sp.error && <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-800">{sp.error}</p>}
         {booked && (
           <div className="mt-5 animate-fade-in rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm">
@@ -95,7 +97,7 @@ export default async function SalonPage({ params, searchParams }: { params: Prom
           </div>
         )}
         {(deals ?? []).length > 0 && (
-          <div className="mt-5 flex flex-wrap gap-2">{[...new Map(deals!.map((d) => [d.title, d])).values()].map((d, i) => <span key={i} className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700"><Ticket className="h-3 w-3" />{d.title}</span>)}</div>
+          <div className="mt-5 flex flex-wrap gap-2">{[...new Map(deals!.map((d) => [d.title, d])).values()].map((d, i) => <span key={i} className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700"><Ticket className="h-3 w-3" />{L(d.title)}</span>)}</div>
         )}
         <div className="mt-8 grid gap-8 pb-28 lg:grid-cols-[1fr_380px]">
           <section>
@@ -108,7 +110,7 @@ export default async function SalonPage({ params, searchParams }: { params: Prom
                   <ul className="divide-y divide-brand-50 overflow-hidden rounded-2xl border border-brand-100 bg-surface shadow-soft">
                     {list.map((sv) => (
                       <li key={sv.id} className={`flex items-center justify-between gap-3 p-4 text-sm ${sv.id === serviceId ? "bg-brand-50/60" : ""}`}>
-                        <div className="min-w-0"><p className="font-medium text-brand-900">{sv.name}</p>{sv.description && <p dir="auto" className="truncate text-xs text-brand-900/50">{sv.description}</p>}<p className="text-xs text-brand-900/45">{sv.duration_min} {tx.min}</p></div>
+                        <div className="min-w-0"><p className="font-medium text-brand-900" title={sv.name}>{L(sv.name)}</p>{sv.description && <p dir="auto" className="truncate text-xs text-brand-900/50">{L(sv.description)}</p>}<p className="text-xs text-brand-900/45">{sv.duration_min} {tx.min}</p></div>
                         <div className="shrink-0 text-right"><p className="font-semibold text-brand-900">{inr(sv.base_price)}</p><Link href={`?service=${sv.id}&date=${date}#book`} className="text-xs font-medium text-brand-600 hover:underline">{sv.id === serviceId ? tx.selected : tx.pick}</Link></div>
                       </li>
                     ))}
@@ -120,9 +122,9 @@ export default async function SalonPage({ params, searchParams }: { params: Prom
           <section id="book" className="lg:sticky lg:top-6 lg:self-start">
             <div className="rounded-2xl border border-brand-100 bg-surface p-5 shadow-lift">
               <h2 className="font-display text-xl font-semibold text-brand-900">{tx.book}</h2>
-              {selected && <p className="text-xs text-brand-900/55">{selected.name} · {selected.duration_min} {tx.min}</p>}
+              {selected && <p className="text-xs text-brand-900/55">{L(selected.name)} · {selected.duration_min} {tx.min}</p>}
               <form className="mb-4 mt-3 grid grid-cols-[1fr_auto] gap-2 text-sm">
-                <select name="service" defaultValue={serviceId} className={`${input} col-span-2`} aria-label="Service">{(services ?? []).map((sv) => <option key={sv.id} value={sv.id}>{sv.name}</option>)}</select>
+                <select name="service" defaultValue={serviceId} className={`${input} col-span-2`} aria-label="Service">{(services ?? []).map((sv) => <option key={sv.id} value={sv.id}>{L(sv.name)}</option>)}</select>
                 <input type="date" name="date" defaultValue={date} min={todayIst()} className={input} aria-label="Date" />
                 <button className="rounded-xl border border-brand-200 px-3 hover:bg-brand-50">{tx.check}</button>
               </form>

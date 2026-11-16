@@ -1,5 +1,5 @@
 // End-to-end smoke test that drives the real UI like a salon owner would.
-// Usage: BASE_URL=http://localhost:3000 node tests/e2e.mjs
+// Usage: BASE_URL=http://localhost:3000 node --env-file=.env.local tests/e2e.mjs   (the env file lets a failed run clean up after itself)
 // Creates a throw-away account + salon and deletes both at the end via Settings → Delete (set KEEP_TEST_DATA=1 to keep them).
 import { createRequire } from "node:module";
 // works with a local devDependency or a globally installed Playwright (NODE_PATH)
@@ -33,11 +33,23 @@ async function expectOk(step) {
 }
 
 const mobileProblems = [];
+// Voice Agent: open the assistant and run a typed command (same path a spoken sentence takes after speech-to-text)
+async function voice(cmd) {
+  const root = page.locator("[data-voice-assistant]");
+  if (!(await page.locator("[role=dialog][aria-label='Voice assistant']").isVisible().catch(() => false))) await page.getByRole("button", { name: "Voice assistant", exact: true }).click();
+  const before = Number(await root.getAttribute("data-voice-count"));
+  await page.getByLabel("Type a command").fill(cmd);
+  await page.getByRole("button", { name: "Run command" }).click();
+  await page.waitForFunction((n) => Number(document.querySelector("[data-voice-assistant]")?.getAttribute("data-voice-count")) > n, before, { timeout: 30_000 });
+  return (await root.getAttribute("data-voice-reply")) ?? "";
+}
 try {
   // ── sign up & onboard
   await page.goto(`${BASE}/signup`);
-  await page.fill("input[name=name]", "E2E Owner");
-  await page.fill("input[name=email]", email);
+  // the Voice Agent fills the sign-up form (never the password — that is typed)
+  log("voice on sign-up:", await voice(`name E2E Owner email ${email}`));
+  if ((await page.inputValue("input[name=name]")) !== "E2E Owner" || (await page.inputValue("input[name=email]")) !== email) throw new Error("voice agent did not fill the sign-up form");
+  if (await page.inputValue("input[name=password]")) throw new Error("voice agent must not touch the password field");
   await page.fill("input[name=password]", "Test12345!");
   await Promise.all([page.waitForURL(/onboarding/), page.click("button[type=submit]")]);
   log("signed up", email);
@@ -117,6 +129,33 @@ try {
   await f.locator("select[name=language]").selectOption("hi");
   await submit(f); await expectOk("client");
 
+  // ── Voice Agent: navigate + fill in one sentence, save on request, answer a question, switch theme
+  await page.goto(`${BASE}/app`);
+  await voice("add client name Meera Voice phone 98765 00011 language tamil");
+  await page.waitForURL(/\/app\/clients/);
+  await page.waitForFunction(() => document.querySelector("input[name=name]")?.value === "Meera Voice", null, { timeout: 30_000 });
+  f = formWith("Add client");
+  if ((await f.locator("input[name=phone]").inputValue()) !== "9876500011" || (await f.locator("select[name=language]").inputValue()) !== "ta") throw new Error("voice agent filled the client form incorrectly");
+  if (await page.locator("text=Client added").count()) throw new Error("voice agent must not save before being told to");
+  log("voice: opened Clients and filled name, phone, language");
+  await voice("save");
+  await page.waitForSelector("text=Meera Voice >> visible=true", { timeout: 60_000 });
+  await expectOk("voice: client saved on “save”");
+  log("voice Q&A:", await voice("how many bookings today?"));
+  await voice("dark mode");
+  if (!(await page.evaluate(() => document.documentElement.classList.contains("dark")))) throw new Error("voice 'dark mode' did not switch the theme");
+  await voice("light mode");
+  // spoken path: a stand-in for the browser's speech recogniser "hears" a sentence when the mic is pressed
+  await page.evaluate(() => {
+    window.SpeechRecognition = window.webkitSpeechRecognition = class {
+      start() { setTimeout(() => { this.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript: "open billing" }], { isFinal: true })] }); this.onend?.(); }, 150); }
+      stop() {} abort() {}
+    };
+  });
+  await page.getByRole("button", { name: "Start listening" }).first().click();
+  await page.waitForURL(/\/app\/billing/, { timeout: 30_000 });
+  log("voice: microphone → “open billing” → Billing page");
+
   const tomorrow = new Date(Date.now() + 5.5 * 3600e3 + 86400e3).toISOString().slice(0, 10);
   await page.goto(`${BASE}/app/bookings?date=${tomorrow}`);
   f = formWith("2 · Quick booking");
@@ -161,6 +200,25 @@ try {
   if (!/Confirmed/.test(confirmed ?? "")) throw new Error("expected a booking confirmation, got: " + confirmed);
   log("concierge confirmation:", confirmed?.slice(0, 120));
   await shot("inbox");
+
+  // ── Indic translation: a Tamil message is shown in English on demand; the reply goes out in Tamil
+  await page.getByText("New test chat").click();
+  f = page.getByRole("form", { name: "Test: incoming message" });
+  await f.locator("input[name=handle]").fill("+919800000003");
+  await f.locator("textarea[name=body]").fill("நாளை மாலை ஹேர்கட் விலை என்ன?");
+  await submit(f); await expectOk("Tamil message received");
+  await page.getByRole("link", { name: /Translate/ }).click();
+  const shown = await page.locator("[data-translation]").first().textContent({ timeout: 60_000 }).catch(() => null);
+  if (shown) { if (!/[a-z]{3}/i.test(shown) || /[\u0B80-\u0BFF]/.test(shown)) throw new Error("translation is not English: " + shown); log("inbox translation (ta → en):", shown.slice(0, 100)); }
+  else console.warn("⚠ no translation provider answered (free API quota?) — inbox translation not verified in this run");
+  if (await page.locator("input[name=translate_to]").count()) {
+    await page.locator("section[aria-label=Conversation] textarea[name=body]").fill("Our haircut is 600 rupees. See you tomorrow!");
+    await page.getByRole("button", { name: "Send reply" }).click();
+    await page.waitForSelector("text=/Reply (translated|sent)/", { timeout: 60_000 });
+    const sentBody = await page.locator(".wa-out p.whitespace-pre-wrap").last().textContent();
+    if (/translated to Tamil/.test((await flash()) ?? "") && !/[\u0B80-\u0BFF]/.test(sentBody ?? "")) throw new Error("reply was not sent in Tamil: " + sentBody);
+    log("reply to Tamil customer:", (await flash()) ?? "", "→", sentBody?.slice(0, 80));
+  }
 
   // ── procurement & all agents
   await page.goto(`${BASE}/app/inventory`);
@@ -231,11 +289,29 @@ try {
   await shot("marketplace");
   if (!found) throw new Error("marketplace search did not find the salon");
 
+  // ── Translator Agent: catalogue stored in Indian languages → salon page in Hindi
+  await page.goto(`${BASE}/app/settings`);
+  await submit(page.locator("form", { has: page.getByRole("button", { name: /Translate now|Translating/ }) }));
+  const trMsg = (await flash()) ?? "";
+  log("translator agent:", trMsg);
+  if (/Translated \d+/.test(trMsg)) {
+    const salonHref = await page.evaluate(() => document.querySelector("a[href^='/s/']")?.getAttribute("href"));
+    await ctx.addCookies([{ name: "sm_lang", value: "hi", url: BASE }]);
+    await page.goto(`${BASE}${salonHref}`);
+    const menu = await page.locator("main").textContent();
+    await ctx.addCookies([{ name: "sm_lang", value: "en", url: BASE }]);
+    if (!/[\u0900-\u097F]{3,}/.test(menu ?? "")) throw new Error("salon page is not shown in Hindi after translation");
+    const hindiService = await page.locator("p[title='Balayage']").textContent().catch(() => null);
+    log("salon page in Hindi — “Balayage” is shown as:", hindiService);
+  } else console.warn("⚠ no translation provider answered — catalogue translation not verified in this run");
+
   // ── mobile audit: every page at phone width must not scroll sideways (owner app + consumer pages, incl. RTL Urdu)
   {
     const m = await page.context().newPage();
     await m.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${BASE}/app`);
     const slug = await page.evaluate(() => document.querySelector("a[href^='/s/']")?.getAttribute("href")) ?? null;
+    if (!slug) throw new Error("public salon page link not found for the mobile audit");
     const routes = ["/app", "/app/bookings", "/app/inbox", "/app/clients", "/app/staff", "/app/services", "/app/inventory", "/app/marketing",
       "/app/loyalty", "/app/billing", "/app/hr", "/app/agents", "/app/studio", "/app/settings", "/marketplace", ...(slug ? [slug] : [])];
     const bad = [];
@@ -285,6 +361,14 @@ try {
   console.error("✘ E2E FAILED:", e.message);
   await shot("failure");
   process.exitCode = 1;
+  // never leave a half-created test account behind: delete it through the same DPDP function the UI uses
+  if (!process.env.KEEP_TEST_DATA && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    try {
+      const { createClient } = createRequire(import.meta.url)("@supabase/supabase-js");
+      const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, { auth: { persistSession: false } });
+      if (!(await sb.auth.signInWithPassword({ email, password: "Test12345!" })).error) { await sb.rpc("delete_my_account"); console.log("cleaned up test account after failure"); }
+    } catch { /* best effort */ }
+  }
 } finally {
   await browser.close();
   console.log("test account:", email);

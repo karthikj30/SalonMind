@@ -56,7 +56,7 @@ export function Field({ label, children, hint, className = "" }: { label: string
     <label className={`block text-xs font-medium text-brand-900/70 ${className}`}>
       <span className="mb-1 block">{label}</span>
       {children}
-      {hint && <span className="mt-1 block font-normal text-brand-900/40">{hint}</span>}
+      {hint && <span data-hint className="mt-1 block font-normal text-brand-900/40">{hint}</span>}
     </label>
   );
 }

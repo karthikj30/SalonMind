@@ -3,6 +3,7 @@ import { CheckCircle2 } from "lucide-react";
 import { Logo } from "./Logo";
 import { SalonArt } from "./SalonArt";
 import { ThemeToggle } from "./ThemeToggle";
+import { VoiceAssistant } from "./VoiceAssistant";
 
 export function AuthShell({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
@@ -29,6 +30,7 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
           <div className="mt-6">{children}</div>
         </div>
       </section>
+      <VoiceAssistant />
     </main>
   );
 }

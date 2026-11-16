@@ -5,6 +5,7 @@ import { signOut, switchSalon } from "../auth-actions";
 import { aiEnabled } from "@/lib/ai/llm";
 import { Sidebar } from "./Sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { VoiceAssistant } from "@/components/VoiceAssistant";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { tenant, salons, user } = await getTenantContext();
@@ -38,6 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 md:px-8 md:py-8">
         <div className="mx-auto max-w-[1400px] animate-fade-in">{children}</div>
       </main>
+      <VoiceAssistant defaultLang={tenant.settings.default_language} />
     </div>
   );
 }

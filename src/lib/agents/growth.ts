@@ -3,6 +3,7 @@ import type { AgentDef } from "./types";
 import { pointsEarned, matchWaitlist, type WaitEntry } from "../domain/loyalty";
 import { visitCycle } from "../domain/crm";
 import { llmText, LANGUAGES } from "../ai/llm";
+import { llmTextIn } from "../ai/translate";
 import { sendMessage } from "../services/messaging";
 import { planBooking } from "../services/booking";
 import { addDays, fmtDate, fmtDateTime, inr, todayIst, toIst } from "../time";
@@ -75,7 +76,7 @@ export const reputationAgent: AgentDef = {
     const actions = [];
     let provider = "rules-engine";
     if (unhappy) {
-      const m = await llmText({
+      const m = await llmTextIn(c.language, {
         system: `You are the manager of ${tenant.name}. Write a sincere WhatsApp apology (max 50 words) in ${lang}. Promise a personal callback within 2 hours and a complimentary fix. No excuses, no discounts in numbers.`,
         messages: [{ role: "user", content: `Client ${c.name}, ${svc}${stylist ? " with " + stylist : ""}, rating ${b.rating ?? "?"}/5. Review: ${b.review ?? "(none)"}` }],
       }, () => `Dear ${c.name}, we're truly sorry your ${svc} at ${tenant.name} didn't meet expectations. Our manager will call you within 2 hours, and we'd love to make it right with a complimentary fix.`);
@@ -85,7 +86,7 @@ export const reputationAgent: AgentDef = {
       actions.push({ type: "recovery", label: `⚠ Service recovery for ${c.name} (${b.rating ?? "?"}★) — manager callback needed`, ref: c.id });
     } else if (c.consent_marketing) {
       const ask = b.rating !== null && b.rating >= 4 && tenant.google_review_url;
-      const m = await llmText({
+      const m = await llmTextIn(c.language, {
         system: `Write a warm WhatsApp thank-you (max 55 words) in ${lang} from ${tenant.name}. ${ask ? `Ask for a Google review at ${tenant.google_review_url}.` : ""} Suggest booking the next ${svc} around ${fmtDate(nextDate)}. Reply YES to book.`,
         messages: [{ role: "user", content: `Client ${c.name}, ${svc}${stylist ? " with " + stylist : ""}, rating ${b.rating ?? "n/a"}.` }],
       }, () => `Thank you for visiting ${tenant.name}, ${c.name}! ${ask ? `If you loved your ${svc}, a quick Google review means a lot: ${tenant.google_review_url} ` : ""}Your next ${svc} is due around ${fmtDate(nextDate)} — reply YES and we'll hold a slot${stylist ? ` with ${stylist}` : ""}.`);
@@ -124,7 +125,7 @@ export const waitlistAgent: AgentDef = {
     const w = (entries ?? []).find((e) => e.id === matches[0].id)!;
     const c = w.clients as { id: string; name: string; phone: string | null; language: string };
     const svc = plan.service.name;
-    const m = await llmText({
+    const m = await llmTextIn(c.language, {
       system: `Write a short WhatsApp message (max 40 words) in ${LANGUAGES[c.language] ?? "English"} from ${tenant.name}: a waitlisted ${svc} slot opened. Ask them to reply YES within 2 hours to grab it.`,
       messages: [{ role: "user", content: `Client ${c.name}, slot ${fmtDateTime(plan.slots[0].start)}, price ${inr(plan.slots[0].quote.price)}.` }],
     }, () => `Good news ${c.name}! A ${svc} slot just opened at ${tenant.name} on ${fmtDateTime(plan.slots[0].start)} (${inr(plan.slots[0].quote.price)}). Reply YES within 2 hours to grab it.`);

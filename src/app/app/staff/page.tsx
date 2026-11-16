@@ -50,7 +50,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
             <Field label="Base salary ₹/month"><Input name="base_salary" type="number" defaultValue={15000} /></Field>
             <Field label="Cost ₹/hour"><Input name="hourly_cost" type="number" defaultValue={200} /></Field>
             <Field label="Product commission %"><Input name="product_commission_pct" type="number" defaultValue={5} /></Field>
-            <Field label="Phone"><Input name="phone" /></Field>
+            <Field label="Phone"><Input name="phone" type="tel" inputMode="tel" /></Field>
             <Field label="Gender (for PT slabs)"><Select name="gender" defaultValue=""><option value="">—</option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option></Select></Field>
             <div className="flex items-end gap-3 text-xs"><label className="flex items-center gap-1"><input type="checkbox" name="pf_enabled" defaultChecked /> PF</label><label className="flex items-center gap-1"><input type="checkbox" name="esi_enabled" defaultChecked /> ESI</label></div>
             <Field label="Commission slabs (JSON)" className="col-span-2"><Textarea name="commission_slabs" defaultValue='[{"upto":50000,"pct":10},{"upto":150000,"pct":15},{"upto":null,"pct":20}]' /></Field>

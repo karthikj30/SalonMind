@@ -2,7 +2,10 @@ import { getTenantContext } from "@/lib/tenant";
 import { Badge, Card, Field, Flash, Input, PageHeader, Select, Textarea } from "@/components/ui";
 import { fmtDateTime } from "@/lib/time";
 import { SubmitButton } from "@/components/SubmitButton";
-import { reindexServices, updateSalon, updateSettings } from "../actions";
+import { reindexServices, translateCatalogue, updateSalon, updateSettings } from "../actions";
+import { catalogueStrings } from "@/lib/agents/i18n";
+import { detectLang } from "@/lib/i18n/concierge";
+import { sourceHash, TRANSLATE_LANGS } from "@/lib/domain/translate";
 import { deleteMyAccount } from "../../auth-actions";
 import { STATES } from "@/lib/states";
 import { embeddingModel } from "@/lib/ai/embeddings";
@@ -26,6 +29,16 @@ export default async function Settings({ searchParams }: { searchParams: Promise
   const sp = await searchParams;
   const { db, tenant } = await getTenantContext();
   const audit = await db.from("audit_log").select("*").eq("tenant_id", tenant.id).order("at", { ascending: false }).limit(25);
+  // Translation coverage of the public catalogue per language (Translator Agent)
+  const strings = await catalogueStrings(db, tenant);
+  const { data: trRows } = await db.from("translations").select("lang, source_hash, provider").eq("tenant_id", tenant.id).eq("is_public", true);
+  const hashes = new Set(strings.map(sourceHash));
+  const coverage = TRANSLATE_LANGS.map((l) => {
+    const need = strings.filter((x) => detectLang(x) !== l).length;
+    const have = (trRows ?? []).filter((r) => r.lang === l && hashes.has(r.source_hash)).length;
+    return { l, need, have: Math.min(have, need) };
+  }).filter((c) => c.need > 0);
+  const trProviders = [...new Set((trRows ?? []).map((r) => r.provider))];
   return (
     <>
       <PageHeader eyebrow="AI" title="Settings" subtitle="Salon profile (also your public marketplace page) and the parameters agents operate within. The Self-Optimizing Agent tunes some of these automatically from your data." />
@@ -37,7 +50,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
             <Field label="City"><Input name="city" defaultValue={tenant.city ?? ""} /></Field>
             <Field label="State"><Select name="state" defaultValue={`${tenant.state_code}|${tenant.state}`}>{STATES.map(([c, n]) => <option key={c} value={`${c}|${n}`}>{c} {n}</option>)}</Select></Field>
             <Field label="GSTIN"><Input name="gstin" defaultValue={tenant.gstin ?? ""} /></Field>
-            <Field label="Phone"><Input name="phone" defaultValue={tenant.phone ?? ""} /></Field>
+            <Field label="Phone"><Input name="phone" type="tel" inputMode="tel" defaultValue={tenant.phone ?? ""} /></Field>
             <Field label="Opens"><Input name="open_time" type="time" defaultValue={tenant.open_time.slice(0, 5)} /></Field>
             <Field label="Closes"><Input name="close_time" type="time" defaultValue={tenant.close_time.slice(0, 5)} /></Field>
             <Field label="Address" className="col-span-2"><Input name="address" defaultValue={tenant.address ?? ""} /></Field>
@@ -59,6 +72,20 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <Card title="AI search index">
             <p className="mb-2 text-sm text-brand-900/65">Active embedding model: <code>{embeddingModel()}</code>. Re-index after adding a GEMINI_API_KEY to upgrade from local hashed embeddings to semantic embeddings.</p>
             <form action={reindexServices}><SubmitButton variant="secondary">Re-index services</SubmitButton></form>
+          </Card>
+          <Card title="Languages — catalogue translation">
+            <p className="mb-3 text-sm text-brand-900/65">The Translator Agent keeps your service menu, description and deals in English + 12 Indian languages, so customers read your salon page in their own language. It runs automatically when you add or edit services; free providers only{trProviders.length ? <> (so far: <b>{trProviders.join(", ")}</b>)</> : null}.</p>
+            {strings.length ? (
+              <ul className="mb-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
+                {coverage.map((c) => (
+                  <li key={c.l}>
+                    <span className="flex justify-between"><span>{LANGUAGES[c.l] ?? c.l}</span><span className="text-brand-900/55">{c.have}/{c.need}</span></span>
+                    <span className="mt-0.5 block h-1.5 overflow-hidden rounded-full bg-brand-100"><span className={`block h-full rounded-full ${c.have >= c.need ? "bg-emerald-500" : "bg-gold-400"}`} style={{ width: `${Math.round((c.have / c.need) * 100)}%` }} /></span>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="mb-3 text-xs text-brand-900/50">Add services first — there is nothing to translate yet.</p>}
+            <form action={translateCatalogue}><SubmitButton variant="secondary" pendingText="Translating…">Translate now</SubmitButton></form>
           </Card>
           <Card title="Audit log (append-only)">
             {audit.error ? (

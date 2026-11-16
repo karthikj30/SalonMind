@@ -9,6 +9,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguagePicker } from "@/components/LanguagePicker";
 import { getDict } from "@/lib/i18n/server";
 import { isRtl } from "@/lib/i18n/ui";
+import { loadTranslations } from "@/lib/agents/i18n";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Find a salon" };
@@ -16,16 +17,18 @@ export const metadata = { title: "Find a salon" };
 export default async function Marketplace() {
   const { lang, t } = await getDict();
   const KIND = t.dealKinds;
-  let deals: { id: string; title: string; description: string | null; discount_pct: number; kind: string; valid_to: string; tenants: { name: string; slug: string; city: string | null } | null }[] = [];
+  let L: (t: string | null | undefined) => string = (t) => t ?? "";
+  let deals: { id: string; tenant_id: string; title: string; description: string | null; discount_pct: number; kind: string; valid_to: string; tenants: { name: string; slug: string; city: string | null } | null }[] = [];
   let salons: { id: string; name: string; slug: string; city: string | null; description: string | null }[] = [];
   try {
     const db = await botClient();
     const [d, s] = await Promise.all([
-      db.from("deals").select("id, title, description, discount_pct, kind, valid_to, tenants!inner(name, slug, city, is_published)").eq("active", true).eq("tenants.is_published", true).gte("valid_to", new Date().toISOString()).order("created_at", { ascending: false }).limit(12),
+      db.from("deals").select("id, tenant_id, title, description, discount_pct, kind, valid_to, tenants!inner(name, slug, city, is_published)").eq("active", true).eq("tenants.is_published", true).gte("valid_to", new Date().toISOString()).order("created_at", { ascending: false }).limit(12),
       db.from("tenants").select("id, name, slug, city, description").eq("is_published", true).order("created_at", { ascending: false }).limit(24),
     ]);
     deals = (d.data ?? []) as unknown as typeof deals;
     salons = s.data ?? [];
+    if (lang !== "en") L = await loadTranslations(db, [...new Set([...deals.map((x) => x.tenant_id), ...salons.map((x) => x.id)])], lang);
   } catch { /* not configured */ }
   return (
     <main lang={lang} dir={isRtl(lang) ? "rtl" : undefined}>
@@ -54,7 +57,7 @@ export default async function Marketplace() {
                   <div className="relative flex-1 border-l-2 border-dashed border-brand-100 p-4">
                     <span className="absolute -left-2 -top-2 h-4 w-4 rounded-full bg-ivory-100" aria-hidden /><span className="absolute -bottom-2 -left-2 h-4 w-4 rounded-full bg-ivory-100" aria-hidden />
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-gold-600">{KIND[d.kind] ?? d.kind}</p>
-                    <p className="mt-0.5 font-medium text-brand-900">{d.title}</p>
+                    <p className="mt-0.5 font-medium text-brand-900" dir="auto">{L(d.title)}</p>
                     <p className="mt-1 flex items-center gap-1 text-xs text-brand-900/55"><Store className="h-3 w-3" />{d.tenants?.name}{d.tenants?.city && <> · <MapPin className="h-3 w-3" />{d.tenants.city}</>}</p>
                     <p className="mt-1 text-[11px] text-brand-900/40">{t.until} {fmtDateTime(d.valid_to)}</p>
                   </div>
@@ -76,7 +79,7 @@ export default async function Marketplace() {
                       <span className={`grid h-14 w-14 place-items-center rounded-2xl border-4 border-white bg-gradient-to-br font-display text-lg font-semibold text-white shadow-soft ${m.gradient}`}>{m.initials}</span>
                       <p className="mt-2 font-semibold text-brand-900 group-hover:text-brand-600">{s.name}</p>
                       <p className="flex items-center gap-1 text-xs text-brand-900/55"><MapPin className="h-3 w-3" />{s.city}</p>
-                      {s.description && <p className="mt-1.5 line-clamp-2 text-xs text-brand-900/60">{s.description}</p>}
+                      {s.description && <p dir="auto" className="mt-1.5 line-clamp-2 text-xs text-brand-900/60">{L(s.description)}</p>}
                     </div>
                   </Link>
                 );

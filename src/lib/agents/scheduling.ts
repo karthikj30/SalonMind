@@ -3,6 +3,7 @@ import type { AgentDef } from "./types";
 import { noShowRisk } from "../domain/noshow";
 import { occupancy } from "../domain/scheduling";
 import { llmText, LANGUAGES } from "../ai/llm";
+import { llmTextIn } from "../ai/translate";
 import { sendMessage } from "../services/messaging";
 import { upiLink } from "../domain/upi";
 import { addDays, festivalOn, fmtDateTime, inr, istDate, timeToMin, todayIst, toIst } from "../time";
@@ -40,7 +41,7 @@ export const noShowAgent: AgentDef = {
           let pay = "";
           if (deposit && tenant.upi_vpa) { try { pay = " " + upiLink({ vpa: tenant.upi_vpa, name: tenant.name, amount: deposit, note: `Deposit ${b.services?.name ?? "booking"}`, ref: b.id.slice(0, 12) }); } catch { /* invalid VPA in settings */ } }
           const fallback = `Hi ${client.name}, reminder: your ${b.services?.name ?? "appointment"} at ${tenant.name} is on ${fmtDateTime(b.start_at)}. Reply 1 to confirm or 2 to reschedule.${deposit ? ` To hold the slot, please pay a ${inr(deposit)} deposit via UPI.${pay}` : ""}`;
-          const m = await llmText({
+          const m = await llmTextIn(client.language, {
             system: `Write a short WhatsApp appointment confirmation nudge (max 45 words) in ${LANGUAGES[client.language] ?? "English"} for salon ${tenant.name}. Include: reply 1 to confirm, 2 to reschedule.${deposit ? ` Also ask for a ${inr(deposit)} UPI deposit to hold the slot${pay ? ` and include this exact payment link on its own line: ${pay.trim()}` : ""}.` : ""}`,
             messages: [{ role: "user", content: `Client ${client.name}, ${b.services?.name}, ${fmtDateTime(b.start_at)}.` }],
           }, () => fallback);

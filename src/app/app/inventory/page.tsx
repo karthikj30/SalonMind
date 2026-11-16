@@ -89,7 +89,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
             <form action={addVendor} className="grid grid-cols-2 gap-2">
               <Field label="Name" className="col-span-2"><Input name="name" required /></Field>
               <Field label="Email"><Input name="email" type="email" /></Field>
-              <Field label="Phone"><Input name="phone" /></Field>
+              <Field label="Phone"><Input name="phone" type="tel" inputMode="tel" /></Field>
               <Field label="GSTIN"><Input name="gstin" /></Field>
               <Field label="State"><Select name="state_code" defaultValue={tenant.state_code ?? ""}>{STATES.map(([c, n]) => <option key={c} value={c}>{c} {n}</option>)}</Select></Field>
               <Field label="Flexibility 0–1" hint="prior for negotiation"><Input name="flexibility" type="number" step="0.05" min={0} max={1} defaultValue={0.5} /></Field>

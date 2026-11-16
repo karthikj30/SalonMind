@@ -20,7 +20,7 @@ export default async function Onboarding({ searchParams }: { searchParams: Promi
           </Select>
         </Field>
         <Field label="GSTIN" hint="Optional — enables e-invoice reference"><Input name="gstin" placeholder="27ABCDE1234F1Z5" /></Field>
-        <Field label="Phone"><Input name="phone" placeholder="+91…" /></Field>
+        <Field label="Phone"><Input name="phone" type="tel" inputMode="tel" placeholder="+91…" /></Field>
         <Field label="Address" className="sm:col-span-2"><Input name="address" /></Field>
         <Field label="Short description (shown in marketplace)" className="sm:col-span-2"><Textarea name="description" placeholder="Balayage specialists, bridal makeup and men's grooming." /></Field>
         <div className="sm:col-span-2"><SubmitButton className="w-full !py-2.5">Create salon</SubmitButton></div>

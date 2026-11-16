@@ -62,7 +62,7 @@ export default async function Hr({ searchParams }: { searchParams: Promise<Recor
           <form action={addCandidate} className="space-y-2">
             <Field label="Role"><Select name="job_id">{(jobs ?? []).map((j) => <option key={j.id} value={j.id}>{j.title}</option>)}</Select></Field>
             <Field label="Name"><Input name="name" required /></Field>
-            <Field label="Phone"><Input name="phone" /></Field>
+            <Field label="Phone"><Input name="phone" type="tel" inputMode="tel" /></Field>
             <Field label="Source"><Select name="source">{["Naukri", "Apna", "Indeed", "Instagram", "LinkedIn", "Referral", "Walk-in"].map((s) => <option key={s}>{s}</option>)}</Select></Field>
             <Field label="Resume text"><Textarea name="resume_text" rows={6} required /></Field>
             <SubmitButton pendingText="Screening…">Add & screen</SubmitButton>

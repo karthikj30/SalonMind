@@ -12,6 +12,9 @@ import { computePayroll, screeningTurn } from "@/lib/agents/hr";
 import { configureWorkflow, generateLayout, setAgentEnabled } from "@/lib/agents/platform";
 import { embed, embeddingModel, toPgVector } from "@/lib/ai/embeddings";
 import { sendMessage } from "@/lib/services/messaging";
+import { translate } from "@/lib/ai/translate";
+import { detectLang } from "@/lib/i18n/concierge";
+import { LANGUAGES } from "@/lib/ai/llm";
 import { addDays, istDate, todayIst, toIst } from "@/lib/time";
 
 const s = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
@@ -34,6 +37,7 @@ export async function addService(fd: FormData) {
   const { data, error } = await db.from("services").insert(row).select("id").single();
   if (error) fail("/app/services", error.message);
   await indexService(db, data.id, `${row.name}. ${row.category}. ${row.description ?? ""}`);
+  await emit(db, tenant.id, "catalogue.changed", { service_id: data.id }, "human"); // → Translator Agent
   done("/app/services", `Service "${row.name}" added and indexed for AI search.`);
 }
 
@@ -178,8 +182,21 @@ export async function simulateInbound(fd: FormData) {
 export async function manualReply(fd: FormData) {
   const { db, tenant } = await getTenantContext();
   const handle = s(fd, "handle");
-  await sendMessage(db, { tenant_id: tenant.id, client_id: s(fd, "client_id") || null, contact_handle: handle, phone: handle, channel: s(fd, "channel"), body: s(fd, "body"), agent: "human" });
-  done(`/app/inbox?h=${encodeURIComponent(handle)}`, "Reply sent.");
+  let body = s(fd, "body");
+  let meta: Record<string, unknown> = {};
+  let note = "Reply sent.";
+  // "Send in the customer's language": the owner types in any language, the customer reads their own
+  const to = s(fd, "translate_to");
+  if (to && to !== detectLang(body)) {
+    const t = await translate(body, to);
+    if (t.provider !== "none" && t.provider !== "same-language") {
+      meta = { original: body, translated_by: t.provider, language: to };
+      body = t.text;
+      note = `Reply translated to ${LANGUAGES[to] ?? to} (${t.provider}) and sent.`;
+    } else note = "Reply sent as typed — no translation provider answered.";
+  }
+  await sendMessage(db, { tenant_id: tenant.id, client_id: s(fd, "client_id") || null, contact_handle: handle, phone: handle, channel: s(fd, "channel"), body, agent: "human", meta });
+  done(`/app/inbox?h=${encodeURIComponent(handle)}${s(fd, "tr") ? `&tr=${s(fd, "tr")}` : ""}`, note);
 }
 
 // ───────────── Marketing ─────────────
@@ -190,6 +207,7 @@ export async function createDeal(fd: FormData) {
     kind: "manual", discount_pct: n(fd, "discount_pct"), valid_to: istDate(s(fd, "valid_to"), "23:59").toISOString(),
   });
   if (error) fail("/app/marketing", error.message);
+  await emit(db, tenant.id, "catalogue.changed", { deal: s(fd, "title") }, "human");
   done("/app/marketing", "Deal published to the marketplace.");
 }
 
@@ -351,6 +369,7 @@ export async function updateSalon(fd: FormData) {
     description: s(fd, "description"), google_review_url: s(fd, "google_review_url") || null, upi_vpa: s(fd, "upi_vpa") || null, open_time: s(fd, "open_time"), close_time: s(fd, "close_time"), is_published: fd.get("is_published") === "on",
   }).eq("id", tenant.id);
   if (error) fail("/app/settings", error.message);
+  if (s(fd, "description") !== (tenant.description ?? "")) await emit(db, tenant.id, "catalogue.changed", { field: "description" }, "human");
   done("/app/settings", "Salon profile saved.");
 }
 
@@ -505,6 +524,13 @@ export async function setConversationStatus(fd: FormData) {
   const handle = s(fd, "handle"), status = s(fd, "status") === "human" ? "human" : "ai";
   await db.from("conversations").upsert({ tenant_id: tenant.id, contact_handle: handle, status, reason: status === "human" ? "taken over by staff" : null, unclear_count: 0, updated_at: new Date().toISOString() });
   done(`/app/inbox?h=${encodeURIComponent(handle)}`, status === "ai" ? "Handed back to the AI concierge." : "You are now handling this conversation; the AI will stay silent.");
+}
+
+export async function translateCatalogue() {
+  const { db, tenant } = await getTenantContext();
+  const def = AGENTS.find((a) => a.id === "translator")!;
+  const out = await runAgent(def, { db, tenant, trigger: "manual" });
+  done("/app/settings", out.summary);
 }
 
 // ───────────── Workflow designer (plain-language configuration) ─────────────

@@ -5,6 +5,7 @@ import { churnRisk, lexiconSentiment, visitCycle } from "../domain/crm";
 import { daysToBirthday } from "../domain/loyalty";
 import { detectLang, isNo as i18nIsNo, isYes as i18nIsYes, matchService, reply as tr, REPLY_LANGS, ruleIntent as i18nRuleIntent } from "../i18n/concierge";
 import { LANGUAGES, llmJson, llmText } from "../ai/llm";
+import { llmTextIn } from "../ai/translate";
 import { sendMessage } from "../services/messaging";
 import { createBooking, findOrCreateClient, planBooking } from "../services/booking";
 import { addDays, fmtDateTime, inr, todayIst, toIst } from "../time";
@@ -73,7 +74,7 @@ export const churnAgent: AgentDef = {
 };
 
 async function writeOffer(tenant: Tenant, client: { name: string; language: string }, ctx: string, fallback: string) {
-  return llmText({
+  return llmTextIn(client.language, {
     system: `You are the CRM agent for ${tenant.name}, a salon in ${tenant.city ?? "India"}. Write ONE WhatsApp message (max 55 words) in ${lang(client.language)}. Warm, personal, no hashtags, include the concrete offer and a call to action to reply to book. Never invent prices other than given.`,
     messages: [{ role: "user", content: ctx }],
     temperature: 0.7,

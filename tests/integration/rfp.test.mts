@@ -24,6 +24,10 @@ const { searchMarketplace } = await import("../../src/lib/services/marketplace")
 const { issueInvoice } = await import("../../src/lib/services/invoicing");
 const { embed, toPgVector } = await import("../../src/lib/ai/embeddings");
 const { addDays, istDate, todayIst, toIst } = await import("../../src/lib/time");
+const { translate } = await import("../../src/lib/ai/translate");
+const { loadTranslations } = await import("../../src/lib/agents/i18n");
+const { sourceHash } = await import("../../src/lib/domain/translate");
+const { interpretVoice } = await import("../../src/lib/agents/voice");
 type Tenant = import("../../src/lib/agents/types").Tenant;
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!, KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -478,6 +482,88 @@ describe("Module 5 — marketplace", () => {
     assert.equal(bk!.length, 0);
     const { data: cl } = await anon.from("clients").select("id").eq("tenant_id", tenant.id);
     assert.equal(cl!.length, 0);
+  });
+});
+
+describe("Indic translation (free providers) + Translator Agent", () => {
+  const reachable = async () => fetch("https://api.mymemory.translated.net/get?q=hello&langpair=en|hi", { signal: AbortSignal.timeout(8000) }).then((r) => r.ok).catch(() => false);
+
+  test("Gateway translates English → Tamil and Kannada → English with no API key; phone numbers never leave the server", async (t) => {
+    if (!(await reachable())) return t.skip("MyMemory public API not reachable from this network");
+    const realFetch = globalThis.fetch;
+    const sent: string[] = [];
+    globalThis.fetch = ((u: RequestInfo | URL, i?: RequestInit) => { sent.push(decodeURIComponent(String(u))); return realFetch(u, i); }) as typeof fetch;
+    try {
+      const ta = await translate("Your facial is confirmed for tomorrow. Call us on +919811100099 if you are late.", "ta");
+      assert.match(ta.text, /[\u0B80-\u0BFF]/, `Tamil script expected, got: ${ta.text}`);
+      assert.match(ta.text, /\+919811100099/, "the phone number is restored in the translated text");
+      assert.ok(sent.length > 0 && sent.every((u) => !u.includes("9811100099")), "…but was masked in every outbound request");
+      const en = await translate("ನಾಳೆ ಸಂಜೆ ಹೇರ್ ಕಟ್ ಬೇಕು", "en");
+      assert.match(en.text, /hair|cut/i, en.text);
+      assert.equal((await translate("Hello", "en")).provider, "same-language");
+    } finally { globalThis.fetch = realFetch; }
+  });
+
+  test("Translator Agent stores the catalogue in Indian languages; consumers read it, private inbox translations stay private", async (t) => {
+    if (!(await reachable())) return t.skip("MyMemory public API not reachable from this network");
+    const out = await runAgent(AGENTS.find((a) => a.id === "translator")!, { db, tenant, trigger: "manual" });
+    assert.match(out.summary, /Translated \d+ catalogue text/, out.summary);
+    const { data: rows } = await db.from("translations").select("lang, source_text, text, provider, is_public").eq("tenant_id", tenant.id);
+    const hi = rows!.find((r) => r.lang === "hi" && r.source_text === "Classic facial");
+    assert.ok(hi && /[\u0900-\u097F]/.test(hi.text), `Hindi translation of the service name expected: ${JSON.stringify(hi)}`);
+    assert.ok(new Set(rows!.map((r) => r.lang)).size >= 3, "several languages per run");
+    const L = await loadTranslations(mk(), [tenant.id], "hi"); // anonymous visitor
+    assert.equal(L("Classic facial"), hi.text);
+    assert.equal(L("something never translated"), "something never translated");
+    // a cached inbox translation (private) must not be readable by the public
+    await db.from("translations").insert({ tenant_id: tenant.id, lang: "en", source_hash: sourceHash("रहस्य संदेश"), source_text: "रहस्य संदेश", text: "secret message", provider: "test", is_public: false });
+    const { data: leaked } = await mk().from("translations").select("id").eq("tenant_id", tenant.id).eq("is_public", false);
+    assert.equal(leaked!.length, 0);
+    const again = await runAgent(AGENTS.find((a) => a.id === "translator")!, { db, tenant, trigger: "manual" });
+    assert.doesNotMatch(again.summary, /Hindi/, "already-translated languages are not translated twice");
+  });
+});
+
+describe("Voice Agent — hands-free navigation, form filling and answers", () => {
+  const page = {
+    path: "/app/clients", forms: [{ index: 0, title: "Add client" }, { index: 1, title: "Delete my account", danger: true }],
+    fields: [{ form: 0, name: "name", label: "Name", type: "text" }, { form: 0, name: "phone", label: "Phone (WhatsApp)", type: "tel" }, { form: 1, name: "confirm", label: "Type DELETE", type: "text" }],
+    buttons: ["Add client", "Delete account"],
+  };
+  test("A spoken sentence becomes safe UI actions; questions are answered from live data; every command is logged without its content", async () => {
+    const fill = await interpretVoice({ db, tenant, text: "name Kavya Rao phone 98111 00088 and save", ctx: page, allowLlm: true });
+    assert.deepEqual(fill.actions, [{ type: "fill", form: 0, name: "name", value: "Kavya Rao" }, { type: "fill", form: 0, name: "phone", value: "9811100088" }, { type: "submit", form: -1 }]);
+    const nav = await interpretVoice({ db, tenant, text: "बुकिंग खोलो", lang: "hi", ctx: page, allowLlm: true });
+    assert.deepEqual(nav.actions, [{ type: "navigate", path: "/app/bookings" }]);
+    const q = await interpretVoice({ db, tenant, text: "how many bookings today?", ctx: page, allowLlm: true });
+    const { count } = await db.from("bookings").select("id", { count: "exact", head: true }).eq("tenant_id", tenant.id).gte("start_at", istDate(today, "00:00").toISOString()).lt("start_at", istDate(tomorrow, "00:00").toISOString()).neq("status", "cancelled");
+    assert.match(q.say, new RegExp(`^${count} booking`), q.say);
+    assert.equal(q.actions.length, 0);
+    const bad = await interpretVoice({ db, tenant, text: "click delete account", ctx: page, allowLlm: true });
+    assert.equal(bad.actions.length, 0, "nothing destructive is ever returned");
+    const { data: runs } = await db.from("agent_runs").select("summary, actions").eq("tenant_id", tenant.id).eq("agent", "voice").eq("trigger", "voice");
+    assert.ok(runs!.length >= 4);
+    assert.ok(!JSON.stringify(runs).includes("Kavya") && !JSON.stringify(runs).includes("9811100088"), "what was said (names, numbers) is not stored in the run log");
+    const report = await runAgent(AGENTS.find((a) => a.id === "voice")!, { db, tenant, trigger: "manual" });
+    assert.match(report.summary, /voice command\(s\) in the last 7 days/);
+  });
+});
+
+describe("Security — append-only audit trail (migration 0007)", () => {
+  test("Changes to sensitive tables are logged with actor and changed columns, never values; history cannot be edited", async () => {
+    const { data: c } = await db.from("clients").insert({ tenant_id: tenant.id, name: "Audit Probe", phone: "+919811100077" }).select("id").single();
+    await db.from("clients").update({ notes: "allergic to ammonia" }).eq("id", c!.id);
+    const { data: log } = await db.from("audit_log").select("*").eq("tenant_id", tenant.id).eq("row_id", c!.id).order("id");
+    // (the live scheduler may also touch this client — e.g. churn scoring — so look for our two changes rather than an exact list)
+    assert.equal(`${log![0].table_name}:${log![0].op}`, "clients:insert");
+    assert.equal(log![0].actor_type, "agent"); // the test connects as the platform-agent service account
+    assert.ok(log!.some((l) => l.op === "update" && JSON.stringify(l.changed_fields) === '["notes"]'), JSON.stringify(log));
+    assert.ok(!JSON.stringify(log).includes("ammonia"), "values are never stored in the audit log");
+    await db.from("audit_log").delete().eq("tenant_id", tenant.id);
+    await db.from("audit_log").update({ op: "tampered" }).eq("tenant_id", tenant.id);
+    const { data: after } = await db.from("audit_log").select("op").eq("row_id", c!.id);
+    assert.ok(after!.length >= log!.length && after!.every((l) => l.op !== "tampered"), "audit rows cannot be deleted or rewritten");
+    assert.equal((await mk().from("audit_log").select("id").eq("tenant_id", tenant.id)).data!.length, 0, "not public");
   });
 });
 

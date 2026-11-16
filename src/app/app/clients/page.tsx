@@ -45,7 +45,7 @@ export default async function Clients({ searchParams }: { searchParams: Promise<
         <Card title="Add client">
           <form action={addClient} className="space-y-2">
             <Field label="Name"><Input name="name" required /></Field>
-            <Field label="Phone (WhatsApp)"><Input name="phone" placeholder="+919876543210" /></Field>
+            <Field label="Phone (WhatsApp)"><Input name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="+919876543210" /></Field>
             <Field label="Email"><Input name="email" type="email" /></Field>
             <Field label="Preferred language" hint="AI messages are written in this language"><Select name="language">{Object.entries(LANGUAGES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select></Field>
             <Field label="Birthday" hint="for birthday-week offers"><Input name="birthday" type="date" /></Field>

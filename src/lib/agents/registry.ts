@@ -6,6 +6,8 @@ import { performanceAgent, recruiterAgent } from "./hr";
 import { billingAgent, gstAgent } from "./finance";
 import { optimizerAgent } from "./platform";
 import { loyaltyAgent, reputationAgent, waitlistAgent } from "./growth";
+import { translatorAgent } from "./i18n";
+import { voiceAgent } from "./voice";
 
 /** The agent mesh. Each agent subscribes to bus events and/or runs on the orchestrator's schedule. */
 export const AGENTS: AgentDef[] = [
@@ -15,5 +17,5 @@ export const AGENTS: AgentDef[] = [
   noShowAgent, dealsAgent, waitlistAgent,
   recruiterAgent, performanceAgent,
   billingAgent, gstAgent,
-  optimizerAgent,
+  optimizerAgent, translatorAgent, voiceAgent,
 ];

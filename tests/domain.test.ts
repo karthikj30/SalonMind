@@ -306,3 +306,93 @@ test("Every consumer UI language is complete and its example searches parse with
   }
   assert.ok(isRtl("ur") && !isRtl("hi"));
 });
+
+import { chunkText, looksTranslated, maskPii, sourceHash } from "../src/lib/domain/translate.ts";
+
+test("Translation gateway guards: PII is masked and restored, wrong-script and quota outputs are rejected", () => {
+  const m = maskPii("Call Priya on +91 98765 43210 or priya@example.com, pay at upi://pay?pa=salon@okhdfcbank ₹1,500");
+  assert.doesNotMatch(m.masked, /98765|priya@|okhdfcbank/);
+  assert.match(m.masked, /₹1,500/, "prices stay readable for the translator");
+  assert.equal(m.restore("प्रिया को ⟦0⟧ पर कॉल करें या ⟦1⟧, [2] पर भुगतान करें"), "प्रिया को +91 98765 43210 पर कॉल करें या priya@example.com, upi://pay?pa=salon@okhdfcbank पर भुगतान करें");
+  assert.ok(looksTranslated("फेशियल", "hi", "Facial"));
+  assert.ok(!looksTranslated("Facial", "hi", "Facial"), "untranslated echo is rejected");
+  assert.ok(!looksTranslated("MYMEMORY WARNING: YOU USED ALL AVAILABLE FREE TRANSLATIONS FOR TODAY", "en", "नमस्ते"));
+  assert.ok(!looksTranslated("ஃபேஷியல்", "en", "ஃபேஷியல்"), "English output must not stay in an Indian script");
+  assert.ok(looksTranslated("₹900", "ta", "₹900"), "nothing to translate in a bare amount");
+  const long = Array.from({ length: 40 }, (_, i) => `यह वाक्य संख्या ${i} है।`).join(" ");
+  const chunks = chunkText(long);
+  assert.ok(chunks.length > 1 && chunks.every((c) => Buffer.byteLength(c) <= 450));
+  assert.equal(chunks.join(" "), long);
+  assert.equal(sourceHash(" Balayage "), sourceHash("Balayage"));
+});
+
+import { coerceValue, parseDate, parseEmail, parseTime, parseVoice, sanitizeActions, type VoiceContext } from "../src/lib/domain/voice.ts";
+
+const clientsPage: VoiceContext = {
+  path: "/app/clients",
+  forms: [{ index: 0, title: "Add client" }, { index: 1, title: "Delete everything", danger: true }],
+  fields: [
+    { form: 0, name: "name", label: "Name", type: "text" },
+    { form: 0, name: "phone", label: "Phone (WhatsApp)", type: "tel" },
+    { form: 0, name: "email", label: "Email", type: "email" },
+    { form: 0, name: "language", label: "Preferred language", type: "select-one", options: [{ value: "en", label: "English" }, { value: "ta", label: "Tamil" }, { value: "hi", label: "Hindi" }] },
+    { form: 0, name: "birthday", label: "Birthday", type: "date" },
+    { form: 0, name: "notes", label: "Notes", type: "textarea" },
+    { form: 1, name: "confirm", label: "Type DELETE", type: "text" },
+    { form: 0, name: "password", label: "Password", type: "password" },
+  ],
+  buttons: ["Add client", "Import CSV", "Delete account", "Run all agents now"],
+};
+
+test("Voice agent: navigation in English, Hinglish and Indian scripts", () => {
+  const dash: VoiceContext = { path: "/app", forms: [], fields: [], buttons: [] };
+  for (const [say, path] of [["open bookings", "/app/bookings"], ["take me to the inbox", "/app/inbox"], ["billing", "/app/billing"], ["inventory kholo", "/app/inventory"],
+    ["बुकिंग खोलो", "/app/bookings"], ["ग्राहक दिखाओ", "/app/clients"], ["முன்பதிவு திற", "/app/bookings"], ["ان باکس کھولو", "/app/inbox"], ["show me staff payroll", "/app/staff"]] as const)
+    assert.deepEqual(parseVoice(say, dash), [{ type: "navigate", path }], say);
+  // "add client …" from another page goes to Clients first; the browser repeats the sentence there
+  assert.deepEqual(parseVoice("add client name Meera phone 9876543210", dash), [{ type: "navigate", path: "/app/clients" }]);
+});
+
+test("Voice agent: one sentence fills several fields with typed values", () => {
+  const a = parseVoice("add client name meera nair phone 98765 43210 email meera at gmail dot com language tamil birthday 5 march 1994 notes allergic to ammonia on the scalp", clientsPage);
+  assert.deepEqual(a, [
+    { type: "fill", form: 0, name: "name", value: "Meera Nair" },
+    { type: "fill", form: 0, name: "phone", value: "9876543210" },
+    { type: "fill", form: 0, name: "email", value: "meera@gmail.com" },
+    { type: "fill", form: 0, name: "language", value: "ta" },
+    { type: "fill", form: 0, name: "birthday", value: "1994-03-05" },
+    { type: "fill", form: 0, name: "notes", value: "Allergic to ammonia on the scalp" },
+  ]);
+  assert.deepEqual(parseVoice("नाम मीरा रखो और फ़ोन 9876543210", clientsPage), [
+    { type: "fill", form: 0, name: "name", value: "मीरा" }, { type: "fill", form: 0, name: "phone", value: "9876543210" }]);
+  assert.deepEqual(parseVoice("phone is plus 91 double 9 8765 4321 0 and save", clientsPage).map((x) => x.type), ["fill", "submit"]);
+  assert.deepEqual(parseVoice("save", clientsPage), [{ type: "submit", form: -1 }]);
+});
+
+test("Voice agent: questions, theme, clicks — and nothing destructive or secret", () => {
+  assert.deepEqual(parseVoice("how many bookings today?", clientsPage), [{ type: "query", topic: "bookings_today" }]);
+  assert.deepEqual(parseVoice("what is today's revenue", clientsPage), [{ type: "query", topic: "revenue_today" }]);
+  assert.deepEqual(parseVoice("dark mode", clientsPage), [{ type: "theme", mode: "dark" }]);
+  assert.deepEqual(parseVoice("click run all agents now", clientsPage), [{ type: "click", label: "Run all agents now" }]);
+  assert.equal(parseVoice("click delete account", clientsPage)[0].type, "say", "destructive buttons are never clicked by voice");
+  assert.deepEqual(parseVoice("password hunter2", clientsPage).filter((x) => x.type === "fill"), [], "passwords are never filled by voice");
+  // LLM output is validated against the real page
+  const cleaned = sanitizeActions([
+    { type: "navigate", path: "/app/bookings" }, { type: "navigate", path: "https://evil.example" }, { type: "navigate", path: "/app/settings/../../admin" },
+    { type: "fill", form: 0, name: "phone", value: "98765-43210" }, { type: "fill", form: 0, name: "password", value: "x" }, { type: "fill", form: 1, name: "confirm", value: "DELETE" },
+    { type: "fill", form: 0, name: "language", value: "Klingon" }, { type: "fill", form: 0, name: "nonexistent", value: "x" },
+    { type: "submit", form: 1 }, { type: "submit", form: 0 }, { type: "click", label: "Delete account" }, { type: "click", label: "import csv" }, { type: "eval", code: "alert(1)" },
+  ], clientsPage);
+  assert.deepEqual(cleaned, [
+    { type: "navigate", path: "/app/bookings" }, { type: "fill", form: 0, name: "phone", value: "9876543210" },
+    { type: "submit", form: 0 }, { type: "click", label: "Import CSV" },
+  ]);
+});
+
+test("Voice agent: dates, times and e-mails as people say them", () => {
+  assert.equal(parseTime("6 pm"), "18:00"); assert.equal(parseTime("6:30 in the evening"), "18:30"); assert.equal(parseTime("at 6"), "18:00");
+  assert.equal(parseTime("11 am"), "11:00"); assert.equal(parseTime("14:15"), "14:15");
+  assert.equal(parseDate("25/12/2026"), "2026-12-25"); assert.equal(parseDate("march 5th 2027"), "2027-03-05"); assert.ok(parseDate("tomorrow"));
+  assert.equal(parseEmail("priya dot sharma at the rate gmail dot com"), "priya.sharma@gmail.com"); assert.equal(parseEmail("not an email"), null);
+  assert.equal(coerceValue({ form: 0, name: "base_price", label: "Price", type: "number" }, "2 thousand rupees"), "2000");
+});
