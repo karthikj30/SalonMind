@@ -1,12 +1,14 @@
 import { getTenantContext } from "@/lib/tenant";
 import { Badge, Card, Field, Flash, Input, PageHeader, Select, Table, Td, statusTone } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
-import { addToWaitlist, bookAction, bookWaitlistOffer, completeBooking, recordDeposit, rescheduleAction, setBookingStatus } from "../actions";
+import { addToWaitlist, addWalkin, bookAction, bookWaitlistOffer, callWalkinAction, completeBooking, recordDeposit, rescheduleAction, setBookingStatus, walkinLeft } from "../actions";
+import { queueState } from "@/lib/services/queue";
+import { waitLabel } from "@/lib/domain/queue";
 import { planBooking } from "@/lib/services/booking";
 import { addDays, fmtDateTime, inr, istDate, todayIst, toIst } from "@/lib/time";
 import { upiLink } from "@/lib/domain/upi";
 import { DayCalendar, CategoryLegend } from "@/components/DayCalendar";
-import { CalendarDays, ListChecks, Wand2, Hourglass, Zap } from "lucide-react";
+import { CalendarDays, ListChecks, Wand2, Hourglass, Ticket, Zap } from "lucide-react";
 
 export default async function Bookings({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const sp = await searchParams;
@@ -23,6 +25,7 @@ export default async function Bookings({ searchParams }: { searchParams: Promise
   ]);
   const { data: timeOff } = await db.from("staff_time_off").select("staff_id, start_at, end_at, reason").eq("tenant_id", tenant.id)
     .lte("start_at", istDate(date, "23:59").toISOString()).gte("end_at", istDate(date, "00:00").toISOString());
+  const queue = await queueState(db, tenant).catch(() => null); // null until migration 0009 is applied
   let plan: Awaited<ReturnType<typeof planBooking>> | null = null;
   let planError: string | null = null;
   if (sp.plan && sp.service_id) {
@@ -128,6 +131,31 @@ export default async function Bookings({ searchParams }: { searchParams: Promise
               </div>
             )}
           </Card>
+          {queue && (
+            <Card title={`Walk-in queue · today${queue.nowServing ? ` · now serving #${queue.nowServing}` : ""}`} icon={<Ticket className="h-4 w-4" />}
+              actions={<a href={`/s/${tenant.slug}/queue`} target="_blank" className="text-xs text-brand-600 hover:underline" title="Customers can scan the QR on this page to join the queue themselves">QR & display ↗</a>}>
+              <ul className="mb-3 space-y-1.5 text-xs" data-queue>
+                {queue.serving.map((w) => (
+                  <li key={w.id} className="flex items-center gap-2 rounded-lg bg-emerald-100/70 px-2.5 py-1.5"><b className="grid h-7 w-9 place-items-center rounded-md bg-surface font-mono text-sm">#{w.token_no}</b><span className="min-w-0 flex-1 truncate">{w.name} · {w.services?.name ?? "service"}</span><Badge tone="green">being served</Badge></li>
+                ))}
+                {queue.waiting.map((w) => (
+                  <li key={w.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-ivory-100 px-2.5 py-1.5">
+                    <b className="grid h-7 w-9 place-items-center rounded-md bg-surface font-mono text-sm">#{w.token_no}</b>
+                    <span className="min-w-0 flex-1"><span className="block truncate font-medium text-brand-900">{w.name}{w.source === "qr" && " · via QR"}</span><span className="block truncate text-brand-900/55">{w.services?.name ?? "no service chosen"} · wait {waitLabel(w.eta.waitMin)}</span></span>
+                    <form action={callWalkinAction}><input type="hidden" name="id" value={w.id} /><SubmitButton className="!px-2.5 !py-1 !text-xs" pendingText="Seating…">Call</SubmitButton></form>
+                    <form action={walkinLeft}><input type="hidden" name="id" value={w.id} /><button className="text-brand-900/45 hover:text-red-600" title="Customer left">Left</button></form>
+                  </li>
+                ))}
+                {!queue.waiting.length && !queue.serving.length && <li className="text-brand-900/40">Nobody is waiting. Walk-ins get a token and a live wait estimate; “Call” seats them with the first free stylist.</li>}
+              </ul>
+              <form action={addWalkin} className="grid grid-cols-2 gap-2" aria-label="Add walk-in">
+                <Field label="Walk-in name"><Input name="name" required /></Field>
+                <Field label="Phone"><Input name="phone" type="tel" inputMode="tel" placeholder="for the “your turn” message" /></Field>
+                <Field label="Service" className="col-span-2"><Select name="service_id" required>{(services ?? []).map((sv) => <option key={sv.id} value={sv.id}>{sv.name} · {sv.duration_min} min</option>)}</Select></Field>
+                <div className="col-span-2"><SubmitButton variant="secondary">Give token</SubmitButton></div>
+              </form>
+            </Card>
+          )}
           <Card title="Waitlist" icon={<Hourglass className="h-4 w-4" />}>
             <ul className="mb-3 space-y-1 text-xs">
               {(waitlist ?? []).map((w) => (

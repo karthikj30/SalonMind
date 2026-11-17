@@ -6,6 +6,7 @@ import { aiEnabled } from "@/lib/ai/llm";
 import { Sidebar } from "./Sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { VoiceAssistant } from "@/components/VoiceAssistant";
+import { CommandPalette } from "@/components/CommandPalette";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { tenant, salons, user } = await getTenantContext();
@@ -36,10 +37,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       <Sidebar salon={tenant.name} footer={footer} />
-      <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 md:px-8 md:py-8">
+      <main className="min-w-0 flex-1 px-4 pb-24 pt-5 sm:px-6 md:px-8 md:py-8">
         <div className="mx-auto max-w-[1400px] animate-fade-in">{children}</div>
       </main>
       <VoiceAssistant defaultLang={tenant.settings.default_language} />
+      <CommandPalette />
     </div>
   );
 }

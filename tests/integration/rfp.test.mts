@@ -28,6 +28,8 @@ const { translate } = await import("../../src/lib/ai/translate");
 const { loadTranslations } = await import("../../src/lib/agents/i18n");
 const { sourceHash } = await import("../../src/lib/domain/translate");
 const { interpretVoice } = await import("../../src/lib/agents/voice");
+const { callWalkin, joinQueue, leaveQueue, queueState } = await import("../../src/lib/services/queue");
+const { summariseDay } = await import("../../src/lib/domain/dayclose");
 type Tenant = import("../../src/lib/agents/types").Tenant;
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!, KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -519,8 +521,11 @@ describe("Indic translation (free providers) + Translator Agent", () => {
     await db.from("translations").insert({ tenant_id: tenant.id, lang: "en", source_hash: sourceHash("रहस्य संदेश"), source_text: "रहस्य संदेश", text: "secret message", provider: "test", is_public: false });
     const { data: leaked } = await mk().from("translations").select("id").eq("tenant_id", tenant.id).eq("is_public", false);
     assert.equal(leaked!.length, 0);
-    const again = await runAgent(AGENTS.find((a) => a.id === "translator")!, { db, tenant, trigger: "manual" });
-    assert.doesNotMatch(again.summary, /Hindi/, "already-translated languages are not translated twice");
+    // a second run only fills what is still missing: nothing is translated or stored twice
+    await runAgent(AGENTS.find((a) => a.id === "translator")!, { db, tenant, trigger: "manual" });
+    const { data: after } = await db.from("translations").select("id, created_at, lang, source_hash").eq("tenant_id", tenant.id).eq("is_public", true);
+    assert.equal(new Set(after!.map((r) => `${r.lang}:${r.source_hash}`)).size, after!.length, "one row per text per language");
+    assert.ok(after!.length >= rows!.filter((r) => r.is_public).length);
   });
 });
 
@@ -546,6 +551,61 @@ describe("Voice Agent — hands-free navigation, form filling and answers", () =
     assert.ok(!JSON.stringify(runs).includes("Kavya") && !JSON.stringify(runs).includes("9811100088"), "what was said (names, numbers) is not stored in the run log");
     const report = await runAgent(AGENTS.find((a) => a.id === "voice")!, { db, tenant, trigger: "manual" });
     assert.match(report.summary, /voice command\(s\) in the last 7 days/);
+  });
+});
+
+describe("Front desk — walk-in token queue, day-end closing, daily owner briefing", () => {
+  test("Walk-ins get sequential tokens and wait estimates; calling one books it through the scheduler; names stay private", async () => {
+    const a = await joinQueue(db, tenant, { name: "Walk-in One", phone: "+919811100091", service_id: ids.haircut, source: "desk" });
+    const b = await joinQueue(db, tenant, { name: "Walk-in Two", phone: "+919811100092", service_id: ids.facial, source: "qr" });
+    const c = await joinQueue(db, tenant, { name: "Walk-in Three", service_id: ids.haircut, source: "desk" });
+    assert.deepEqual([b.token_no - a.token_no, c.token_no - b.token_no], [1, 1]);
+    assert.equal((await joinQueue(db, tenant, { name: "Walk-in One again", phone: "+919811100091", service_id: ids.haircut, source: "qr" })).token_no, a.token_no, "same phone keeps its token");
+    let q = await queueState(db, tenant);
+    assert.deepEqual(q.waiting.map((w) => w.eta.position), [1, 2, 3]);
+    const waits = q.waiting.map((w) => w.eta.waitMin);
+    assert.ok(waits.every((w, i) => w === null || i === 0 || waits[i - 1] === null || w >= waits[i - 1]! - 60), `waits are plausible: ${waits}`);
+    await leaveQueue(db, tenant, c.id);
+    const nowMin = toIst(new Date()).minutes;
+    // Seating depends on the clock: inside working hours the token becomes a booking, otherwise it is refused.
+    const r = await callWalkin(db, tenant, a.id).catch((e: Error) => e);
+    if (!(r instanceof Error)) {
+      assert.equal(r.token_no, a.token_no);
+      const { data: bk } = await db.from("bookings").select("source, status, clients!inner(phone)").eq("tenant_id", tenant.id).eq("clients.phone", "+919811100091").eq("source", "walkin");
+      assert.equal(bk!.length, 1, "the called token is a normal booking (billing, stock and loyalty follow)");
+      await processEvents(db, tenant);
+      q = await queueState(db, tenant);
+      assert.equal(q.nowServing, a.token_no); assert.deepEqual(q.waiting.map((w) => w.token_no), [b.token_no]);
+    } else {
+      assert.match(r.message, /free|closed|rest of today/, "outside working hours nobody can be seated");
+      assert.ok(nowMin < 10 * 60 || nowMin > 20 * 60 - 60, `seating was refused during working hours: ${r.message}`);
+      assert.equal((await db.from("bookings").select("id").eq("tenant_id", tenant.id).eq("source", "walkin")).data!.length, 0, "no booking in the past");
+      q = await queueState(db, tenant);
+      assert.equal(q.waiting.length, 2);
+    }
+    assert.equal((await mk().from("walkins").select("id").eq("tenant_id", tenant.id)).data!.length, 0, "the public cannot read who is waiting");
+  });
+
+  test("Day-end closing adds up the real invoices of the day", async () => {
+    const { data: inv } = await db.from("invoices").select("total, taxable_value, cgst, sgst, igst, payment_method, items, splits").eq("tenant_id", tenant.id).eq("invoice_date", today);
+    const d = summariseDay(inv as never);
+    assert.equal(d.invoices, inv!.length);
+    assert.ok(Math.abs(d.total - inv!.reduce((s, i) => s + Number(i.total), 0)) < 0.01);
+    assert.ok(Math.abs(d.methods.reduce((s, m) => s + m.total, 0) - d.total) < 0.01, "payment modes add up to the total");
+    assert.ok(Math.abs(d.taxable + d.gst - d.total) < 1, "taxable + GST = collected");
+  });
+
+  test("Daily Briefing Agent messages the owner once a day with figures from the database", async () => {
+    await db.from("tenants").update({ phone: "+919811100000" }).eq("id", tenant.id);
+    await refresh();
+    const out = await runAgent(agent("briefing"), { db, tenant, trigger: "manual" });
+    assert.match(out.summary, /briefing sent/i);
+    const msgs = async () => (await db.from("messages").select("body").eq("tenant_id", tenant.id).eq("agent", "briefing")).data!;
+    const first = await msgs();
+    assert.equal(first.length, 1);
+    assert.match(first[0].body, /\d+ bookings? today/); assert.match(first[0].body, /Revenue today is ₹/);
+    await runAgent(agent("briefing"), { db, tenant, trigger: "schedule" });
+    assert.equal((await msgs()).length, 1, "not sent twice on the same day (and never before 8 am)");
   });
 });
 

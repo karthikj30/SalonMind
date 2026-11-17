@@ -24,7 +24,10 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = () => { let cur: Pref = "system"; try { cur = (localStorage.getItem("theme") as Pref) || "system"; } catch { /* */ } if (cur === "system") apply("system"); };
     mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
+    // the Voice Agent / command palette can switch the theme too
+    const sync = () => { try { setPref((localStorage.getItem("theme") as Pref) || "system"); } catch { /* */ } };
+    window.addEventListener("sm-theme", sync);
+    return () => { mq.removeEventListener("change", onChange); window.removeEventListener("sm-theme", sync); };
   }, []);
   const next = () => {
     const n = ORDER[(ORDER.indexOf(pref) + 1) % ORDER.length];

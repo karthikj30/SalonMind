@@ -16,11 +16,11 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) (multi-agent mesh, event bus, tenant is
 Instead of case studies, the working system is the evidence. It is live, and every RFP bullet has a test that
 runs against the real database ([`RFP_COVERAGE.md`](RFP_COVERAGE.md)):
 
-* 16 autonomous agents (procurement, negotiation, waste, concierge, churn, campaigns, loyalty, reputation,
+* 20 agents (translator, voice, walk-in queue and daily briefing added to: procurement, negotiation, waste, concierge, churn, campaigns, loyalty, reputation,
   no-show, yield pricing, waitlist, recruitment, performance, billing, GST, self-optimizer) on an event bus.
 * LangChain.js LLM layer (Gemini / OpenAI GPT / Anthropic Claude / free Groq, OpenRouter, Hugging Face,
   Ollama) with a deterministic, multilingual rules engine as the final fallback.
-* 30 unit tests, 38 real-database integration tests (incl. tenant isolation, a 20-way concurrent booking race,
+* 40 unit tests, 46 real-database integration tests (incl. tenant isolation, a 20-way concurrent booking race,
   a Tamil end-to-end booking, a container-to-container microservice test), browser E2E on production.
 
 ## 3. Timeline & milestones
@@ -28,7 +28,7 @@ runs against the real database ([`RFP_COVERAGE.md`](RFP_COVERAGE.md)):
 | Phase | Duration | Scope | Status |
 |---|---|---|---|
 | **Discovery** | 2 weeks | RFP analysis, agent catalogue, data model, architecture, free-tier stack | ✅ done |
-| **MVP** | 6 weeks | All 6 modules, 16 agents, marketplace, GST, multilingual concierge, owner UI, CI, free-tier deploy | ✅ done — this repository |
+| **MVP** | 6 weeks | All 6 modules, 20 agents, marketplace, GST, multilingual concierge, owner UI, CI, free-tier deploy | ✅ done — this repository |
 | **Beta launch** | 8 weeks | Real WhatsApp Business numbers per salon, Razorpay Route split settlements, GSP/IRP e-invoicing, consultation & patch-test forms, credit notes, 10–20 pilot salons in 2 cities, load test to festival peak, observability (OpenTelemetry + Grafana) | planned |
 | **Enterprise scaled release** | 12 weeks | Chains & branches (HQ dashboards, inter-branch stock), GKE production cluster in `asia-south1` with DR replica, SSO, SOC 2 Type I readiness + ISO 27001 ISMS kickoff, voice receptionist, partner APIs | planned |
 

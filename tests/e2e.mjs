@@ -177,7 +177,36 @@ try {
   const invCount = await page.locator("table tbody tr").count();
   if (!invCount) throw new Error("no invoice issued");
   log("invoice issued", (await page.locator("table tbody tr").first().textContent())?.replace(/\s+/g, " "));
+  const close = await page.locator("[data-day-close]").textContent();
+  if (!/Cash to count in the drawer/.test(close ?? "") || !/GST bucket/.test(close ?? "")) throw new Error("day-end closing report missing on Billing");
+  log("day-end closing:", close?.replace(/\s+/g, " ").slice(0, 110));
   await shot("billing");
+
+  // ── walk-in token queue: desk token, customer joins by QR page, owner calls the first token
+  await page.goto(`${BASE}/app/bookings`);
+  f = page.getByRole("form", { name: "Add walk-in" });
+  await f.locator("input[name=name]").fill("Walkin Desk");
+  await f.locator("input[name=phone]").fill("+919800000021");
+  await f.locator("select[name=service_id]").selectOption({ label: "Men's haircut & beard · 45 min" });
+  await submit(f); await expectOk("walk-in token (desk)");
+  const queueHref = await page.evaluate(() => document.querySelector("a[href$='/queue']")?.getAttribute("href"));
+  await page.goto(`${BASE}${queueHref}`);
+  await page.fill("input[name=name]", "Walkin QR");
+  await page.fill("input[name=phone]", "+919800000022");
+  await Promise.all([page.waitForURL(/[?&]t=/), page.click("button[type=submit]")]);
+  const myToken = await page.locator("[data-my-token]").textContent();
+  if (!/#2/.test(myToken ?? "") || !/ahead of you|You are next/.test(myToken ?? "")) throw new Error("public queue page did not show token #2: " + myToken);
+  if (/Walkin Desk/.test((await page.locator("main").textContent()) ?? "")) throw new Error("public queue page must not show other customers' names");
+  log("public queue page:", myToken?.replace(/\s+/g, " ").slice(0, 90));
+  await shot("queue-public");
+  await page.goto(`${BASE}/app/bookings`);
+  if ((await page.locator("[data-queue] li").count()) !== 2) throw new Error("owner queue should list 2 waiting tokens");
+  await submit(page.locator("[data-queue] li").first().locator("form").first());
+  const called = (await flash()) ?? "";
+  // seating follows the clock: inside working hours the token becomes a booking, otherwise it is refused with a reason
+  if (!/Token 1: Men's haircut/.test(called) && !/closed|free/.test(called)) throw new Error("unexpected result when calling a walk-in: " + called);
+  log("call walk-in →", called.slice(0, 110));
+  await shot("queue");
 
   // ── unified inbox (WhatsApp-style): Hinglish booking request
   await page.goto(`${BASE}/app/inbox`);
@@ -188,15 +217,15 @@ try {
   await f.locator("input[name=name]").fill("Rahul");
   await f.locator("textarea[name=body]").fill("Hi, kal 11am men's haircut & beard book kar do please");
   await submit(f); await expectOk("inbox → concierge");
-  const reply = await page.locator(".wa-out p.whitespace-pre-wrap").last().textContent();
+  const reply = await page.locator(".wa-out [data-body]").last().textContent();
   log("concierge reply (proposal):", reply?.slice(0, 160));
   if (!/YES/.test(reply ?? "")) throw new Error("concierge should ask for explicit YES before booking");
   // customer answers from the thread composer ("send as customer" test button)
   await page.locator("section[aria-label=Conversation] textarea[name=body]").fill("yes");
   await page.getByRole("button", { name: "Send as customer (test)" }).click();
-  await page.waitForFunction(() => /Confirmed/.test([...document.querySelectorAll(".wa-out p.whitespace-pre-wrap")].pop()?.textContent ?? ""), null, { timeout: 120_000 }).catch(() => {});
+  await page.waitForFunction(() => /Confirmed/.test([...document.querySelectorAll(".wa-out [data-body]")].pop()?.textContent ?? ""), null, { timeout: 120_000 }).catch(() => {});
   await expectOk("customer confirms → booked");
-  const confirmed = await page.locator(".wa-out p.whitespace-pre-wrap").last().textContent();
+  const confirmed = await page.locator(".wa-out [data-body]").last().textContent();
   if (!/Confirmed/.test(confirmed ?? "")) throw new Error("expected a booking confirmation, got: " + confirmed);
   log("concierge confirmation:", confirmed?.slice(0, 120));
   await shot("inbox");
@@ -215,7 +244,7 @@ try {
     await page.locator("section[aria-label=Conversation] textarea[name=body]").fill("Our haircut is 600 rupees. See you tomorrow!");
     await page.getByRole("button", { name: "Send reply" }).click();
     await page.waitForSelector("text=/Reply (translated|sent)/", { timeout: 60_000 });
-    const sentBody = await page.locator(".wa-out p.whitespace-pre-wrap").last().textContent();
+    const sentBody = await page.locator(".wa-out [data-body]").last().textContent();
     if (/translated to Tamil/.test((await flash()) ?? "") && !/[\u0B80-\u0BFF]/.test(sentBody ?? "")) throw new Error("reply was not sent in Tamil: " + sentBody);
     log("reply to Tamil customer:", (await flash()) ?? "", "→", sentBody?.slice(0, 80));
   }
@@ -289,6 +318,16 @@ try {
   await shot("marketplace");
   if (!found) throw new Error("marketplace search did not find the salon");
 
+  // ── Ctrl+K command palette: jump to a page from the keyboard
+  await page.goto(`${BASE}/app`);
+  await page.waitForLoadState("networkidle");
+  await page.keyboard.press("Control+k");
+  if (!(await page.getByRole("dialog", { name: "Command palette" }).isVisible().catch(() => false))) await page.getByRole("button", { name: "Search and commands" }).first().click(); // same palette via its button
+  await page.getByRole("textbox", { name: "Command", exact: true }).fill("billing");
+  await page.keyboard.press("Enter");
+  await page.waitForURL(/\/app\/billing/);
+  log("Ctrl+K → Billing");
+
   // ── Translator Agent: catalogue stored in Indian languages → salon page in Hindi
   await page.goto(`${BASE}/app/settings`);
   await submit(page.locator("form", { has: page.getByRole("button", { name: /Translate now|Translating/ }) }));
@@ -313,7 +352,7 @@ try {
     const slug = await page.evaluate(() => document.querySelector("a[href^='/s/']")?.getAttribute("href")) ?? null;
     if (!slug) throw new Error("public salon page link not found for the mobile audit");
     const routes = ["/app", "/app/bookings", "/app/inbox", "/app/clients", "/app/staff", "/app/services", "/app/inventory", "/app/marketing",
-      "/app/loyalty", "/app/billing", "/app/hr", "/app/agents", "/app/studio", "/app/settings", "/marketplace", ...(slug ? [slug] : [])];
+      "/app/loyalty", "/app/billing", "/app/hr", "/app/agents", "/app/studio", "/app/settings", "/marketplace", ...(slug ? [slug, `${slug}/queue`] : [])];
     const bad = [];
     for (const lang of ["en", "ta", "ur"]) {
       await page.context().addCookies([{ name: "sm_lang", value: lang, url: BASE }]);

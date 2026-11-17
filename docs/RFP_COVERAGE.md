@@ -3,9 +3,9 @@
 Every requirement in `docs/Salon_Management_System_RFP.pdf`, where it lives in the code, and the test
 that proves it. Three test layers:
 
-* **Unit** — `npm test` → `tests/domain.test.ts` (33 tests, pure business rules)
+* **Unit** — `npm test` → `tests/domain.test.ts` (40 tests, pure business rules)
 * **Integration (real Postgres, no mocks)** — `npm run test:integration` → `tests/integration/rfp.test.mts`
-  (39 tests; creates a throw-away salon through the same service functions the UI uses, runs the real
+  (46 tests; creates a throw-away salon through the same service functions the UI uses, runs the real
   agents, asserts on rows they wrote, deletes everything)
 * **E2E (real browser, real UI)** — `BASE_URL=… node tests/e2e.mjs` (signup → … → 390px phone audit → account deletion)
 
@@ -14,7 +14,7 @@ that proves it. Three test layers:
 | Requirement | Implementation | Tests |
 |---|---|---|
 | Multi-tenant SaaS for any Indian salon | `tenants`, `tenant_members`, RLS on every table (`supabase/migrations`) | INT *Tenant isolation…*, INT *Public (anon) can read…*, E2E signup/onboarding |
-| AI-native, autonomous multi-agent network communicating asynchronously | `src/lib/agents/*` (16 agents), event bus `agent_events`, `processEvents`, `tick` | INT *Orchestrator tick…* + every event-chain test below |
+| AI-native, autonomous multi-agent network communicating asynchronously | `src/lib/agents/*` (20 agents), event bus `agent_events`, `processEvents`, `tick` | INT *Orchestrator tick…* + every event-chain test below |
 | Self-optimizing engine | `optimizer` agent tunes `tenants.settings` | INT *Self-optimizer tightens deposit threshold…* |
 | Auto-generated localized micro-frontends | AI Studio `generateLayout` → typed widget schema, any language | INT *Generative micro-frontend…*, E2E AI Studio |
 | Configure workflows from the salon's needs | **Workflow designer**: plain language → validated plan (pause/resume agents, bounded parameters, protected billing); runtime skips paused agents | UNIT *Workflow designer* (2); INT *Workflow designer: plain-language instruction pauses agents…* |
@@ -111,12 +111,28 @@ that proves it. Three test layers:
 | Stylist ICS calendar feed | easyappointments | UNIT *ICS feed…*; INT *Stylist ICS feed* (HTTP, with BASE_URL) |
 | Face-shape style advisor | hairstyle-recommendation repos | manual (needs a free vision key) |
 
+## Languages, voice and front desk (third research sweep)
+
+| Feature | Agent / code | Tests |
+|---|---|---|
+| Indic translation through free providers (LLM → MyMemory → Hugging Face opus-mt), script check, PII masking | `src/lib/ai/translate.ts`, `domain/translate.ts` | UNIT *Translation gateway guards…*; INT *Gateway translates English → Tamil and Kannada → English…* |
+| Catalogue in 12 Indian languages on salon page, marketplace and search | `translator` agent, table `translations` (migration 0008) | INT *Translator Agent stores the catalogue…*; E2E salon page in Hindi |
+| Inbox: Translate toggle; reply in the customer's language; rules-engine campaigns translated | `/app/inbox`, `manualReply`, `llmTextIn` | E2E Tamil → English, English → Tamil reply |
+| Voice Agent: navigate, fill forms, save on request, answer business questions; browser STT, Whisper fallback; Ctrl+K palette | `voice` agent, `domain/voice.ts`, `VoiceAssistant`, `/api/voice/*` | UNIT *Voice agent…* (4); INT *A spoken sentence becomes safe UI actions…*; E2E sign-up fill, add client, save, Q&A, microphone stand-in |
+| Walk-in token queue with QR self check-in and live wait estimates | `queue` agent, `services/queue.ts`, `domain/queue.ts`, `/s/[slug]/queue` (migration 0009) | UNIT *Walk-in queue…*; INT *Walk-ins get sequential tokens…*; E2E desk token, QR join, call |
+| Day-end closing report (payment modes, cash to count, GST bucket, booth payouts) | `domain/dayclose.ts`, Billing page | UNIT *Day-end closing…*; INT *Day-end closing adds up the real invoices…*; E2E |
+| Daily owner briefing on WhatsApp | `briefing` agent | INT *Daily Briefing Agent messages the owner once a day…* |
+| Append-only audit trail live | migration 0007 | INT *Changes to sensitive tables are logged…* |
+| Phone UX: bottom tab bar, voice button, proper `tel` keyboards | `Sidebar.tsx` | E2E mobile audit (17 pages at 390px) |
+
 ## Proposal (RFP §5)
 
 Timeline, development cost, cloud infrastructure and AI token projections: [`PROPOSAL.md`](PROPOSAL.md).
 
 ## Known limits (honest)
 
+* Voice: browser speech recognition needs Chrome, Edge or Safari; the server Whisper fallback needs a free `GROQ_API_KEY` or `HF_TOKEN` and was not exercised with a live key here. The Hugging Face opus-mt translation tier is likewise untested without a valid token; MyMemory (keyless) is tested live.
+* The owner dashboard and the public queue page are in English; the marketplace, salon page and chat are in 13 languages.
 * WhatsApp/SMS sends are real only with WhatsApp Cloud API keys; otherwise logged as `simulated`.
 * Vendor replies in negotiation are simulated from learned flexibility (no supplier API exists to call).
 * IRN is a deterministic reference hash in the IRP format; a real IRN needs a GSP/IRP integration.

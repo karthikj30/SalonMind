@@ -52,9 +52,12 @@ export const translatorAgent: AgentDef = {
     let remaining = 0;
     const todo = order.map((lang) => ({ lang, missing: strings.filter((s) => detectLang(s) !== lang && !done.has(`${lang}:${sourceHash(s)}`)) })).filter((x) => x.missing.length);
     for (let g = 0; g < todo.length; g += 3) {
-      const group = todo.slice(g, g + 3).map(({ lang, missing }) => {
+      const group = todo.slice(g, g + 3).map(({ lang, missing }, k) => {
         const batch: string[] = [];
-        if (Date.now() - t0 < deadline) for (const s of missing) { if (charBudget - s.length >= 0) { batch.push(s); charBudget -= s.length; } }
+        // fair share: every language still to do gets an equal slice of what is left, shortest texts first
+        // (service names before long descriptions), so no language is starved by the ones before it
+        let share = charBudget / (todo.length - g - k);
+        if (Date.now() - t0 < deadline) for (const s of [...missing].sort((x, y) => x.length - y.length)) { if (share - s.length >= 0) { batch.push(s); share -= s.length; charBudget -= s.length; } }
         remaining += missing.length - batch.length;
         return { lang, batch };
       }).filter((x) => x.batch.length);

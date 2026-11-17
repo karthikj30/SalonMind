@@ -2,7 +2,8 @@ import { getTenantContext } from "@/lib/tenant";
 import { Badge, Card, Field, Flash, Input, PageHeader, Table, Td } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import { prepareGst } from "../actions";
-import { fmtDate, inr, todayIst } from "@/lib/time";
+import { addDays, fmtDate, inr, istDate, todayIst } from "@/lib/time";
+import { summariseDay, type CloseInvoice } from "@/lib/domain/dayclose";
 import { stateName } from "@/lib/states";
 
 type R3b = { outward_taxable: Record<string, number>; itc_available: Record<string, number>; tax_payable_cash: Record<string, number>; credit_carried_forward: Record<string, number> };
@@ -15,6 +16,13 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
     db.from("invoices").select("*, clients(name)").eq("tenant_id", tenant.id).order("created_at", { ascending: false }).limit(100),
     db.from("gst_returns").select("*").eq("tenant_id", tenant.id).eq("period", period).maybeSingle(),
   ]);
+  // Day-end closing for the chosen date (defaults to today)
+  const closeDate = /^\d{4}-\d{2}-\d{2}$/.test(sp.close ?? "") ? sp.close : todayIst();
+  const [{ data: dayInv }, { data: dayTips }] = await Promise.all([
+    db.from("invoices").select("total, taxable_value, cgst, sgst, igst, payment_method, items, splits").eq("tenant_id", tenant.id).eq("invoice_date", closeDate),
+    db.from("staff_adjustments").select("amount").eq("tenant_id", tenant.id).eq("kind", "tip").gte("created_at", istDate(closeDate, "00:00").toISOString()).lt("created_at", istDate(addDays(closeDate, 1), "00:00").toISOString()),
+  ]);
+  const dc = summariseDay((dayInv ?? []) as CloseInvoice[], (dayTips ?? []).map((t) => Number(t.amount)));
   const g = ret?.gstr3b as R3b | undefined;
   const g1 = ret?.gstr1 as { b2cs: { pos: string; rate: number; taxable: number; cgst: number; sgst: number; igst: number }[]; hsn: { code: string; kind: string; qty: number; taxable: number; tax: number }[]; docs: { from: string; to: string; count: number } } | undefined;
   return (
@@ -34,6 +42,37 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
               </tr>
             ))}
           </Table>
+        </Card>
+        <Card title={`Day-end closing · ${fmtDate(closeDate)}`} className="lg:col-span-3" actions={
+          <form className="flex items-end gap-2 text-xs"><input type="hidden" name="period" value={period} /><Input type="date" name="close" defaultValue={closeDate} aria-label="Closing date" /><button className="rounded-xl border border-brand-200 bg-surface px-3 py-2 text-sm hover:bg-brand-50">Show</button></form>}>
+          {dc.invoices ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-day-close>
+              <div className="rounded-xl bg-ivory-100 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-900/50">Collected</p>
+                <p className="mt-1 font-display text-2xl font-semibold text-brand-900">{inr(dc.total)}</p>
+                <p className="text-xs text-brand-900/55">{dc.invoices} invoice{dc.invoices === 1 ? "" : "s"} · average {inr(dc.avgTicket)}</p>
+                <p className="mt-2 text-xs text-brand-900/70">Services {inr(dc.services)} · products {inr(dc.products)}{dc.tips ? ` · tips ${inr(dc.tips)}` : ""}</p>
+              </div>
+              <div className="rounded-xl bg-ivory-100 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-900/50">By payment mode</p>
+                <ul className="mt-1 space-y-0.5 text-sm">{dc.methods.map((m) => <li key={m.method} className="flex justify-between"><span className="capitalize">{m.method} <span className="text-xs text-brand-900/45">×{m.count}</span></span><b>{inr(m.total)}</b></li>)}</ul>
+                <p className="mt-2 rounded-lg bg-gold-100 px-2 py-1 text-xs text-brand-900">Cash to count in the drawer: <b>{inr(dc.cashToCount)}</b></p>
+              </div>
+              <div className="rounded-xl bg-ivory-100 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-900/50">Where the money goes</p>
+                <ul className="mt-1 space-y-0.5 text-sm">
+                  <li className="flex justify-between"><span>GST bucket</span><b>{inr(dc.gst)}</b></li>
+                  <li className="flex justify-between"><span>Salon owner</span><b>{inr(dc.ownerShare)}</b></li>
+                  {dc.renters.map((r) => <li key={r.name} className="flex justify-between"><span>{r.name} <span className="text-xs text-brand-900/45">booth</span></span><b>{inr(r.amount)}</b></li>)}
+                  {dc.gatewayFees > 0 && <li className="flex justify-between text-brand-900/60"><span>Gateway fees</span><span>{inr(dc.gatewayFees)}</span></li>}
+                </ul>
+              </div>
+              <div className="rounded-xl bg-ivory-100 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-900/50">Top sellers</p>
+                <ul className="mt-1 space-y-0.5 text-sm">{dc.top.map((t) => <li key={t.name} className="flex justify-between gap-2"><span className="truncate">{t.name}</span><b>{inr(t.value)}</b></li>)}</ul>
+              </div>
+            </div>
+          ) : <p className="text-sm text-brand-900/45">No invoices on {fmtDate(closeDate)}. Pick another date, or complete a booking to issue one.</p>}
         </Card>
         <Card title="GST returns (draft)">
           <form action={prepareGst} className="mb-3 flex items-end gap-2">

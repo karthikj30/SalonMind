@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Bot, BriefcaseBusiness, CalendarDays, Crown, LayoutDashboard, Megaphone, Menu, MessagesSquare, Package,
-  Receipt, Scissors, Settings, Sparkles, UserCog, Users, X,
+  Receipt, Scissors, Search, Settings, Sparkles, UserCog, Users, X,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 
@@ -49,6 +49,9 @@ export function Sidebar({ salon, footer }: { salon: string; footer: React.ReactN
         <Link href="/app" className="group flex items-center gap-2.5"><Logo className="h-9 w-9 transition-transform duration-500 group-hover:rotate-[-8deg] group-hover:scale-110" /><span className="font-display text-xl font-semibold">SalonMind</span></Link>
         <p className="mt-2.5 truncate rounded-lg bg-white/10 px-3 py-1.5 text-xs text-onplum/85" title={salon}>✦ {salon}</p>
       </div>
+      <button type="button" onClick={() => window.dispatchEvent(new Event("sm-palette"))} className="mx-4 mb-3 flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-1.5 text-left text-xs text-onplum/70 transition hover:bg-white/10" aria-label="Search and commands">
+        <Search className="h-3.5 w-3.5" aria-hidden /><span className="flex-1">Search or command…</span><kbd className="rounded border border-white/20 px-1 text-[10px]">Ctrl K</kbd>
+      </button>
       <div className="gold-rule mx-5 opacity-40" />
       {nav}
       <div className="border-t border-white/10 px-4 py-3 text-xs text-onplum/70">{footer}</div>
@@ -58,8 +61,25 @@ export function Sidebar({ salon, footer }: { salon: string; footer: React.ReactN
     <>
       <header className="no-print sticky top-0 z-30 flex items-center justify-between bg-plum-gradient px-4 py-3 text-white md:hidden">
         <Link href="/app" className="flex items-center gap-2"><Logo className="h-8 w-8" /><span className="font-display text-lg font-semibold">SalonMind</span></Link>
-        <button onClick={() => setOpen(true)} className="rounded-lg p-2 hover:bg-white/10" aria-label="Open menu"><Menu className="h-5 w-5" /></button>
+        <div className="flex items-center">
+          <button onClick={() => window.dispatchEvent(new Event("sm-palette"))} className="rounded-lg p-2 hover:bg-white/10" aria-label="Search and commands"><Search className="h-5 w-5" /></button>
+          <button onClick={() => setOpen(true)} className="rounded-lg p-2 hover:bg-white/10" aria-label="Open menu"><Menu className="h-5 w-5" /></button>
+        </div>
       </header>
+      {/* phone: thumb-reach tab bar for the pages used all day */}
+      <nav className="no-print fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-brand-100 bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden" aria-label="Quick navigation">
+        {([["/app", "Home", LayoutDashboard], ["/app/bookings", "Bookings", CalendarDays], ["/app/inbox", "Inbox", MessagesSquare], ["/app/clients", "Clients", Users]] as const).map(([href, label, Icon]) => {
+          const active = href === "/app" ? path === "/app" : path.startsWith(href);
+          return (
+            <Link key={href} href={href} aria-current={active ? "page" : undefined} className={`flex flex-col items-center gap-0.5 py-2 text-[10.5px] font-medium transition ${active ? "text-brand-700" : "text-brand-900/50"}`}>
+              <span className={`grid h-7 w-12 place-items-center rounded-full transition ${active ? "bg-brand-100" : ""}`}><Icon className="h-[18px] w-[18px]" aria-hidden /></span>{label}
+            </Link>
+          );
+        })}
+        <button type="button" onClick={() => setOpen(true)} className="flex flex-col items-center gap-0.5 py-2 text-[10.5px] font-medium text-brand-900/50" aria-label="More pages">
+          <span className="grid h-7 w-12 place-items-center"><Menu className="h-[18px] w-[18px]" aria-hidden /></span>More
+        </button>
+      </nav>
       <aside className="no-print sticky top-0 hidden h-screen w-64 shrink-0 md:block">{panel}</aside>
       {open && (
         <div className="fixed inset-0 z-40 md:hidden" role="dialog" aria-modal="true">

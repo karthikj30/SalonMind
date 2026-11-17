@@ -60,6 +60,42 @@ Found via GitHub search (`salon management`, `appointment booking open source`):
 None of the open-source projects are AI-native or multi-tenant, none handle Indian GST, and none have an
 agent mesh — those remain SalonMind's differentiators.
 
+## Third sweep (Nov 2026) — free language / speech services and front-desk features
+
+**Free translation and speech services checked**
+
+| Service | Key needed | Result | Used |
+|---|---|---|---|
+| MyMemory public API | none (≈5,000 chars/day per IP) | all 12 Indian languages translated correctly in a live test, incl. Assamese and Odia | ✅ keyless tier |
+| LLM gateway (Groq / Gemini / OpenRouter / Hugging Face router) | free key | best quality, batched; already part of the app | ✅ first tier when a key is set |
+| Hugging Face Inference `Helsinki-NLP/opus-mt-en-mul`, `opus-mt-mul-en` | `HF_TOKEN` | hosted ("warm"); quality below the two above | ✅ last tier |
+| AI4Bharat IndicTrans2 (Hugging Face) | — | best open Indic model, but not on hosted inference (custom code) — needs self-hosting | ❌ documented as an upgrade path |
+| Bhashini (Govt. of India) | registration + keys | free but key-gated | ❌ not keyless |
+| Browser Web Speech API | none | speech recognition in Chrome / Edge / Safari with `hi-IN`, `ta-IN`… locales | ✅ primary speech-to-text |
+| Groq `whisper-large-v3-turbo` | free key | fast multilingual transcription | ✅ fallback 1 |
+| Hugging Face `openai/whisper-large-v3-turbo` | `HF_TOKEN` | hosted | ✅ fallback 2 |
+
+**Features seen in competing products**
+
+| Idea | Seen in | Status here |
+|---|---|---|
+| AI receptionist / concierge that books from calls and messages | Zenoti, Fresha, Boulevard | ✅ concierge (text); live voice calls need a telephony provider |
+| Walk-in queue with tokens, QR self check-in, waiting-area display | SpeedUpSalon, DINGG | ✅ built (wait estimates from the real calendar) |
+| Day-end closing / cash tally | common in Indian POS | ✅ built |
+| Owner daily digest | Zenoti-style "assistant" summaries | ✅ Daily Briefing Agent |
+| Hands-free / voice operation | — (not found in competitors) | ✅ Voice Agent |
+| Gift cards tied to billing | SpeedUpSalon, Salon4me, Salonify | ⏭ next (new table; wallet engine can be reused) |
+| Service packages / family-pooled memberships | Zylu, SpeedUpSalon, DINGG | ⏭ next |
+| Staff attendance / check-in | DINGG (commission leakage) | ⏭ next |
+| AI lead management | Zenoti | ⏭ later |
+
+Sources: https://www.zenoti.com/thecheckin/best-salon-management-software-2026 ·
+https://www.techjockey.com/detail/speedupsalon ·
+https://dingg.app/blogs/best-salon-management-software-in-india-for-2026-why-dingg-stands-out ·
+https://www.capterra.in/software/1026558/zylu · https://sagnikbhattacharya.com/blog/salon-spa-software-ai-compared ·
+https://console.groq.com/docs/speech-to-text · https://huggingface.co/ai4bharat/indictrans2-en-indic-1B ·
+https://dev.to/build996/free-whisper-api-groq-deepgram-assemblyai-compared-562m
+
 ## Source links
 
 * https://blog.miosalon.com/10-best-salon-software-hands-on-comparison-for-salons-in-2026/

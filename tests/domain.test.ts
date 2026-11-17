@@ -396,3 +396,30 @@ test("Voice agent: dates, times and e-mails as people say them", () => {
   assert.equal(parseEmail("priya dot sharma at the rate gmail dot com"), "priya.sharma@gmail.com"); assert.equal(parseEmail("not an email"), null);
   assert.equal(coerceValue({ form: 0, name: "base_price", label: "Price", type: "number" }, "2 thousand rupees"), "2000");
 });
+
+import { estimateWaits, waitLabel } from "../src/lib/domain/queue.ts";
+import { summariseDay } from "../src/lib/domain/dayclose.ts";
+
+test("Walk-in queue: wait estimates respect stylists' existing appointments and working hours", () => {
+  const staff = [
+    { id: "a", workStart: 600, workEnd: 1200, busy: [{ start: 600, end: 660 }] },          // busy until 11:00
+    { id: "b", workStart: 600, workEnd: 1200, busy: [{ start: 630, end: 690 }] },          // free now, appointment 10:30–11:30
+  ];
+  const eta = estimateWaits([{ id: "t1", duration: 30 }, { id: "t2", duration: 45 }, { id: "t3", duration: 30 }], staff, 600); // it is 10:00
+  assert.deepEqual(eta.map((e) => [e.position, e.waitMin]), [[1, 0], [2, 60], [3, 90]]);
+  // t1 fits b's gap before 10:30; t2 (45 min) needs a from 11:00; t3 goes to b at 11:30
+  assert.equal(estimateWaits([{ id: "late", duration: 60 }], [{ id: "a", workStart: 600, workEnd: 630, busy: [] }], 600)[0].waitMin, null, "cannot finish before closing");
+  assert.equal(waitLabel(0), "now"); assert.equal(waitLabel(23), "about 25 min"); assert.equal(waitLabel(70), "about 1 h 10 min"); assert.match(waitLabel(null), /not today/);
+});
+
+test("Day-end closing: totals by payment mode, GST, cash to count, booth-renter payouts and top services", () => {
+  const d = summariseDay([
+    { total: 1180, taxable_value: 1000, cgst: 90, sgst: 90, igst: 0, payment_method: "cash", items: [{ description: "Haircut", kind: "service", taxable_value: 1000 }], splits: { gateway_fee: 0, tax_bucket: 180, salon_owner: 1000, booth_renter: null } },
+    { total: 3540, taxable_value: 3000, cgst: 270, sgst: 270, igst: 0, payment_method: "card", items: [{ description: "Balayage", kind: "service", taxable_value: 2500 }, { description: "Shampoo", kind: "product", taxable_value: 500 }], splits: { gateway_fee: 70.8, tax_bucket: 540, salon_owner: 878.76, booth_renter: { name: "Ravi", amount: 2050.44 } } },
+    { total: 590, taxable_value: 500, cgst: 45, sgst: 45, igst: 0, payment_method: "cash", items: [{ description: "Haircut", kind: "service", taxable_value: 500 }], splits: null },
+  ], [100, 50]);
+  assert.equal(d.invoices, 3); assert.equal(d.total, 5310); assert.equal(d.gst, 810); assert.equal(d.cashToCount, 1770);
+  assert.deepEqual(d.methods, [{ method: "card", count: 1, total: 3540 }, { method: "cash", count: 2, total: 1770 }]);
+  assert.equal(d.services, 4000); assert.equal(d.products, 500); assert.equal(d.tips, 150); assert.equal(d.avgTicket, 1770);
+  assert.deepEqual(d.renters, [{ name: "Ravi", amount: 2050.44 }]); assert.equal(d.top[0].name, "Balayage"); assert.equal(d.top[1].value, 1500);
+});

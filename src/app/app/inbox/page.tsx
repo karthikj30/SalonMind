@@ -118,7 +118,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Re
       </div>
       <Flash msg={sp.msg} error={sp.error} />
 
-      <div className="grid h-[calc(100dvh-10.5rem)] min-h-[520px] grid-cols-1 overflow-hidden rounded-2xl border border-[var(--wa-line)] bg-[var(--wa-in)] shadow-soft md:grid-cols-[minmax(280px,360px)_minmax(0,1fr)] sm:h-[calc(100dvh-12rem)]">
+      <div className="grid h-[calc(100dvh-14.5rem)] min-h-[440px] grid-cols-1 overflow-hidden rounded-2xl border border-[var(--wa-line)] bg-[var(--wa-in)] shadow-soft md:grid-cols-[minmax(280px,360px)_minmax(0,1fr)] md:h-[calc(100dvh-12rem)] md:min-h-[520px]">
         {/* ── Chat list ── */}
         <aside className={`${showThread ? "hidden md:flex" : "flex"} min-h-0 flex-col border-r border-[var(--wa-line)] bg-[var(--wa-in)]`} aria-label="Conversations">
           <div className="flex items-center justify-between bg-[var(--wa-panel)] px-3 py-2.5">
@@ -236,7 +236,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<Re
                         {newDay && <p className="mx-auto my-2 rounded-lg bg-[var(--wa-in)] px-3 py-1 text-[11.5px] uppercase tracking-wide text-[var(--wa-meta)] shadow-sm">{dayLabel(m.created_at)}</p>}
                         <div className={`wa-bubble animate-fade-up ${out ? "wa-out self-end" : "wa-in self-start"} ${tail ? "wa-tail mt-1.5" : ""}`}>
                           {out && tail && <p className="mb-0.5 text-[11.5px] font-medium" style={{ color: m.agent === "human" ? "#7f66ff" : "#00a884" }}>{m.agent === "human" ? "👤 You" : `🤖 ${m.agent ?? "AI"}`}</p>}
-                          <p className="whitespace-pre-wrap text-[14.5px] leading-snug" dir="auto">{m.body}</p>
+                          <p className="whitespace-pre-wrap text-[14.5px] leading-snug" dir="auto" data-body>{m.body}</p>
                           {!out && shown.has(sourceHash(m.body)) && <p className="mt-1 whitespace-pre-wrap border-t border-black/10 pt-1 text-[13px] italic leading-snug opacity-80 dark:border-white/15" dir="auto" data-translation>🌐 {shown.get(sourceHash(m.body))}</p>}
                           {out && typeof m.meta?.original === "string" && <p className="mt-1 whitespace-pre-wrap border-t border-black/10 pt-1 text-[12.5px] italic leading-snug opacity-70 dark:border-white/15" dir="auto">You wrote: {m.meta.original}</p>}
                           <p className="wa-meta mt-0.5 flex flex-wrap items-center justify-end gap-1 text-[11px]">

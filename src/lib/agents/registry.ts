@@ -8,14 +8,15 @@ import { optimizerAgent } from "./platform";
 import { loyaltyAgent, reputationAgent, waitlistAgent } from "./growth";
 import { translatorAgent } from "./i18n";
 import { voiceAgent } from "./voice";
+import { briefingAgent, queueAgent } from "./frontdesk";
 
 /** The agent mesh. Each agent subscribes to bus events and/or runs on the orchestrator's schedule. */
 export const AGENTS: AgentDef[] = [
   inventoryAgent, negotiatorAgent, wasteAgent,
   conciergeAgent, churnAgent, retentionAgent,
   loyaltyAgent, reputationAgent,
-  noShowAgent, dealsAgent, waitlistAgent,
+  noShowAgent, dealsAgent, waitlistAgent, queueAgent,
   recruiterAgent, performanceAgent,
   billingAgent, gstAgent,
-  optimizerAgent, translatorAgent, voiceAgent,
+  optimizerAgent, translatorAgent, voiceAgent, briefingAgent,
 ];

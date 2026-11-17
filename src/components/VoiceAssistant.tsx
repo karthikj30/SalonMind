@@ -224,6 +224,13 @@ export function VoiceAssistant({ defaultLang = "en" }: { defaultLang?: string })
     } catch { say("Microphone access is blocked — allow it in the browser, or type the command."); }
   }, [listening, stop, lang, command, say]);
 
+  // commands typed in the Ctrl+K palette arrive here
+  useEffect(() => {
+    const onCmd = (e: Event) => { const t = (e as CustomEvent<string>).detail; if (typeof t === "string" && t.trim()) { setOpen(true); setMini(false); void command(t); } };
+    window.addEventListener("sm-voice-command", onCmd);
+    return () => window.removeEventListener("sm-voice-command", onCmd);
+  }, [command]);
+
   // Alt+V toggles the microphone from anywhere
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.altKey && e.key.toLowerCase() === "v") { e.preventDefault(); setOpen(true); void listen(); } };
@@ -234,17 +241,18 @@ export function VoiceAssistant({ defaultLang = "en" }: { defaultLang?: string })
 
   const lastReply = [...lines].reverse().find((l) => l.who === "ai")?.text ?? "";
   const replies = lines.filter((l) => l.who === "ai").length;
-  const raise = pathname === "/app/inbox" ? "bottom-[9.5rem] md:bottom-24" : pathname.startsWith("/app") ? "bottom-[4.75rem] md:bottom-5" : "bottom-5";
+  // The inbox composer owns the bottom-right corner, so there the assistant sits top-right and opens downwards.
+  const place = pathname === "/app/inbox" ? "top-[4.4rem] flex-col-reverse md:top-6" : `flex-col ${pathname.startsWith("/app") ? "bottom-[4.75rem] md:bottom-5" : "bottom-5"}`;
   return (
-    <div {...{ [ROOT]: "" }} data-voice-count={replies} data-voice-reply={lastReply} className={`no-print pointer-events-none fixed right-3 z-40 flex flex-col items-end sm:right-5 [&>*]:pointer-events-auto ${raise}`}>
+    <div {...{ [ROOT]: "" }} data-voice-count={replies} data-voice-reply={lastReply} className={`no-print pointer-events-none fixed right-3 z-40 flex items-end gap-2.5 sm:right-5 md:right-8 [&>*]:pointer-events-auto ${place}`}>
       {open && mini && (
-        <div className="mb-2 flex max-w-[min(20rem,calc(100vw-5rem))] animate-fade-up items-center gap-2 rounded-2xl border border-brand-100 bg-surface py-1.5 pl-3 pr-1.5 text-xs text-brand-900 shadow-lift" role="status">
+        <div className="flex max-w-[min(20rem,calc(100vw-5rem))] animate-fade-up items-center gap-2 rounded-2xl border border-brand-100 bg-surface py-1.5 pl-3 pr-1.5 text-xs text-brand-900 shadow-lift" role="status">
           <button type="button" onClick={() => setMini(false)} className="line-clamp-2 flex-1 text-left" title="Show the conversation" dir="auto">{busy ? "Working…" : interim ? `${interim}…` : lastReply || "Listening when you tap the mic"}</button>
           <button type="button" onClick={() => void listen()} aria-pressed={listening} aria-label={listening ? "Stop listening" : "Start listening"} className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-white ${listening ? "animate-pulse bg-red-500" : "bg-rose-gold"}`}>{listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}</button>
         </div>
       )}
       {open && !mini && (
-        <div role="dialog" aria-label="Voice assistant" className="mb-3 flex max-h-[min(30rem,calc(100dvh-9rem))] w-[min(22rem,calc(100vw-1.5rem))] origin-bottom-right animate-scale-in flex-col overflow-hidden rounded-2xl border border-brand-100 bg-surface shadow-lift">
+        <div role="dialog" aria-label="Voice assistant" className="flex max-h-[min(30rem,calc(100dvh-9rem))] w-[min(22rem,calc(100vw-1.5rem))] origin-bottom-right animate-scale-in flex-col overflow-hidden rounded-2xl border border-brand-100 bg-surface shadow-lift">
           <div className="flex items-center gap-2 bg-plum-gradient px-3 py-2.5 text-white">
             <Mic className="h-4 w-4" aria-hidden />
             <p className="flex-1 text-sm font-semibold">Voice assistant</p>
@@ -285,7 +293,7 @@ export function VoiceAssistant({ defaultLang = "en" }: { defaultLang?: string })
         </div>
       )}
       <button type="button" onClick={() => { if (open && mini) setMini(false); else { setOpen((o) => !o); setMini(false); } }} aria-expanded={open && !mini} aria-label="Voice assistant" title="Voice assistant (Alt + V)"
-        className={`ml-auto grid h-12 w-12 place-items-center rounded-full bg-plum-gradient text-white shadow-lift ring-2 ring-white/20 transition hover:scale-105 active:scale-95 ${listening ? "animate-pulse" : ""}`}>
+        className={`grid h-12 w-12 shrink-0 place-items-center rounded-full bg-plum-gradient text-white shadow-lift ring-2 ring-white/20 transition hover:scale-105 active:scale-95 ${listening ? "animate-pulse" : ""}`}>
         <Mic className="h-5 w-5" />
       </button>
     </div>

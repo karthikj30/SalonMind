@@ -13,6 +13,7 @@ import { configureWorkflow, generateLayout, setAgentEnabled } from "@/lib/agents
 import { embed, embeddingModel, toPgVector } from "@/lib/ai/embeddings";
 import { sendMessage } from "@/lib/services/messaging";
 import { translate } from "@/lib/ai/translate";
+import { callWalkin, joinQueue, leaveQueue } from "@/lib/services/queue";
 import { detectLang } from "@/lib/i18n/concierge";
 import { LANGUAGES } from "@/lib/ai/llm";
 import { addDays, istDate, todayIst, toIst } from "@/lib/time";
@@ -524,6 +525,36 @@ export async function setConversationStatus(fd: FormData) {
   const handle = s(fd, "handle"), status = s(fd, "status") === "human" ? "human" : "ai";
   await db.from("conversations").upsert({ tenant_id: tenant.id, contact_handle: handle, status, reason: status === "human" ? "taken over by staff" : null, unclear_count: 0, updated_at: new Date().toISOString() });
   done(`/app/inbox?h=${encodeURIComponent(handle)}`, status === "ai" ? "Handed back to the AI concierge." : "You are now handling this conversation; the AI will stay silent.");
+}
+
+// ───────────── Walk-in token queue ─────────────
+export async function addWalkin(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  let msg = "";
+  try {
+    const t = await joinQueue(db, tenant, { name: s(fd, "name"), phone: s(fd, "phone") || null, service_id: s(fd, "service_id") || null, source: "desk" });
+    await processEvents(db, tenant, 5);
+    msg = `Token ${t.token_no} issued to ${s(fd, "name")}.`;
+  } catch (e) { fail("/app/bookings", (e as Error).message); }
+  done("/app/bookings", msg);
+}
+
+export async function callWalkinAction(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  let msg = "";
+  try {
+    const r = await callWalkin(db, tenant, s(fd, "id"));
+    await processEvents(db, tenant, 8);
+    msg = `Token ${r.token_no}: ${r.service} with ${r.stylist} at ${r.time}. Complete it from the schedule when done.`;
+  } catch (e) { fail("/app/bookings", (e as Error).message); }
+  done("/app/bookings", msg);
+}
+
+export async function walkinLeft(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  await leaveQueue(db, tenant, s(fd, "id"));
+  await processEvents(db, tenant, 5);
+  done("/app/bookings", "Removed from the queue.");
 }
 
 export async function translateCatalogue() {

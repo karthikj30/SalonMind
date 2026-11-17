@@ -6,10 +6,25 @@
 | Tenant isolation | Postgres Row-Level Security on every table; browser holds only publishable key + user JWT; DB exclusion constraints | integration *Tenant isolation…*, *Public (anon)…* |
 | Least privilege | security-definer RPCs gated to roles; anon cannot execute helper functions; agents act via a scoped service account (no service-role key) | Supabase advisors; migrations 0003, 0005 |
 | Audit logging (ISO 27001 A.8.15 / SOC 2 CC7.2) | Every autonomous action in `agent_runs` + `agent_events`. **Append-only `audit_log`** trigger on sensitive tables (actor, actor type, table, op, row, changed column names — never values) | migration `0007_audit_log.sql` — *pending approval in Supabase at the time of writing* |
-| Change management / secure SDLC (A.8.25–8.29, CC8.1) | CI on every push (typecheck, 30 unit tests, build, Kubernetes manifest validation, Docker image builds); 38 real-DB integration tests; browser E2E; reviewed migrations | `.github/workflows/ci.yml`, `docs/RFP_COVERAGE.md` |
+| Change management / secure SDLC (A.8.25–8.29, CC8.1) | CI on every push (typecheck, 40 unit tests, build, Kubernetes manifest validation, Docker image builds); 46 real-DB integration tests; browser E2E; reviewed migrations | `.github/workflows/ci.yml`, `docs/RFP_COVERAGE.md` |
 | Availability (A.8.14, A1.2) | Serverless autoscaling; K8s HPAs, PDBs, rolling updates with zero unavailable; health/readiness probes | `deploy/k8s` |
 | AI safety | LLM output is parsed into typed JSON and validated; prices/slots/tax computed by domain code, never the model; AI bookings are two-phase (customer must say YES); complaints escalate to humans | integration *two-phase*, *handoff* |
 | DPDP Act 2023 | Purpose-bound consent (`consent_marketing`), data export (`/api/clients/:id/export`), client erasure (anonymise + keep de-identified tax records), **owner self-deletion** of account and salons, data minimisation in audit logs, Indian data residency (Supabase `ap-south-1`, Vercel `bom1`) | integration + E2E *DPDP erasure* |
+
+## Translation, voice and the public queue — data handling
+
+* **Translation:** before any text is sent to a translation provider, phone numbers, e-mail addresses, UPI ids and
+  links are replaced by placeholders and restored afterwards (`maskPii`, tested). Catalogue translations are public
+  rows; cached inbox translations are private rows (`translations.is_public = false`) that anonymous visitors cannot
+  read (integration test).
+* **Voice:** only the page's field names and labels are sent to the server, never the values already typed. The agent
+  log stores the kind of action taken, not what was said. Passwords, OTP / card fields and delete buttons are blocked
+  in the validator that every proposed action passes through — whether it came from the rules engine or an LLM.
+  Anonymous visitors (sign-in / sign-up pages) never trigger a model call.
+* **Walk-in queue:** the public page shows token numbers and wait times only; names and phone numbers are readable
+  by salon staff alone (RLS, integration test).
+* **Audit log:** migration `0007_audit_log.sql` is applied in production; the integration test proves entries cannot
+  be edited or deleted and never contain values.
 
 ## What remains organisational (cannot be "built in")
 

@@ -106,9 +106,25 @@ Everything below is entered by hand in the UI so you can watch each agent react.
 42. **Calendar feed**: Staff → copy a stylist's `.ics` URL → Google Calendar → *Other calendars → From URL*.
 43. **Style advisor**: Marketplace → tick *Style advisor* → upload a selfie (needs a free Groq/Gemini key).
 
+## 12. Translation, voice, walk-in queue, day close
+44. **Translate the catalogue**: Settings → *Languages* → **Translate now**. Open your public page, switch the
+    language picker to हिन्दी / தமிழ் — service names, description and deals are translated.
+45. **Inbox translation**: Inbox → New test chat → send `நாளை மாலை ஹேர்கட் விலை என்ன?` → press **Translate** in the
+    chat header (English appears under the message). Type a reply in English with *Send my reply in Tamil* ticked.
+46. **Voice Agent**: press the round microphone button (bottom-right; Alt+V). Say or type `open bookings`,
+    `add client name Meera phone 98765 43210 language tamil`, then `save`; ask `how many bookings today?`.
+    Change the speech language in the panel to try `बुकिंग खोलो`. It also works on the sign-up page (not for the password).
+47. **Ctrl/⌘ + K**: type `billing` + Enter, or any sentence to hand it to the Voice Agent.
+48. **Walk-in queue**: Bookings → *Walk-in queue* → give a token. Open **QR & display** in another window
+    (or scan the QR on a phone) and take a second token — you see your number, how many are ahead and the wait.
+    Back on Bookings press **Call** on the first token: it is booked with the first free stylist.
+49. **Day-end closing**: Billing → *Day-end closing* (after completing at least one booking today).
+50. **Daily briefing**: add the salon phone in Settings → Agent Console → run *Daily Briefing Agent* → see the
+    message in the Inbox.
+
 ## Automated checks
 ```bash
 npm run typecheck && npm test && npm run build
 npm run test:integration                            # every RFP bullet against the real DB (see RFP_COVERAGE.md)
-BASE_URL=http://localhost:3000 node tests/e2e.mjs   # drives steps 1–14, 18–22, 27, 29–31, 33, 36 in a real browser
+BASE_URL=http://localhost:3000 node --env-file=.env.local tests/e2e.mjs   # drives steps 1–14, 18–22, 27, 29–31, 33, 36, 44–49 in a real browser
 ```
