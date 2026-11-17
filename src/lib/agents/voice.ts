@@ -4,13 +4,17 @@ import type { AgentDef, Tenant } from "./types";
 import { aiEnabled, LANGUAGES, llmJson } from "../ai/llm";
 import { parseVoice, QUERY_TOPICS, sanitizeActions, VOICE_HELP, VOICE_ROUTES, type QueryTopic, type VoiceAction, type VoiceContext } from "../domain/voice";
 import { addDays, fmtDateTime, inr, istDate, todayIst } from "../time";
+import { translateKeeping } from "../ai/translate";
+import { isTLang } from "../domain/translate";
+import { detectLang } from "../i18n/concierge";
 
 /** Spoken answers to "how is my salon doing?" questions — computed from the database, never by the model. */
-export async function answerQuery(db: SupabaseClient, tenant: Tenant, topic: QueryTopic): Promise<string> {
+export async function answerQuery(db: SupabaseClient, tenant: Tenant, topic: QueryTopic, protect: string[] = []): Promise<string> {
   const from = istDate(todayIst(), "00:00").toISOString(), to = istDate(addDays(todayIst(), 1), "00:00").toISOString();
   const bookings = async () => {
     const { data } = await db.from("bookings").select("start_at, status, clients(name), services(name)").eq("tenant_id", tenant.id).gte("start_at", from).lt("start_at", to).neq("status", "cancelled").order("start_at");
     const next = (data ?? []).find((b) => new Date(b.start_at) > new Date() && b.status !== "completed") as { start_at: string; clients: { name: string } | null; services: { name: string } | null } | undefined;
+    if (next) protect.push(next.clients?.name ?? "", next.services?.name ?? "");
     return `${data?.length ?? 0} booking${data?.length === 1 ? "" : "s"} today${next ? `; next is ${next.clients?.name ?? "a client"} for ${next.services?.name ?? "a service"} at ${fmtDateTime(next.start_at).split(", ").pop()}` : ""}.`;
   };
   const revenue = async () => {
@@ -20,10 +24,12 @@ export async function answerQuery(db: SupabaseClient, tenant: Tenant, topic: Que
   const stock = async () => {
     const { data } = await db.from("products").select("name, stock_qty, reorder_level").eq("tenant_id", tenant.id);
     const low = (data ?? []).filter((p) => Number(p.stock_qty) <= Number(p.reorder_level));
+    protect.push(...low.slice(0, 5).map((p) => p.name));
     return low.length ? `${low.length} product${low.length === 1 ? " is" : "s are"} at or below reorder level: ${low.slice(0, 5).map((p) => p.name).join(", ")}.` : "No product is below its reorder level.";
   };
   const risk = async () => {
     const { data } = await db.from("clients").select("name, churn_risk").eq("tenant_id", tenant.id).gte("churn_risk", 0.6).order("churn_risk", { ascending: false }).limit(5);
+    protect.push(...(data ?? []).map((c) => c.name));
     return data?.length ? `${data.length} client${data.length === 1 ? " is" : "s are"} at risk of leaving: ${data.map((c) => c.name).join(", ")}.` : "No clients are flagged at risk right now.";
   };
   const handoffs = async () => {
@@ -79,13 +85,20 @@ Never invent fields, buttons or paths. Never delete anything. Never fill passwor
 
   // answer questions from live data
   const spoken: string[] = [];
+  const protect: string[] = []; // names that must not be sent to a translation provider
   for (const a of actions) {
-    if (a.type === "query") spoken.push(o.db && o.tenant ? await answerQuery(o.db, o.tenant, a.topic) : "Sign in to ask about your salon.");
+    if (a.type === "query") spoken.push(o.db && o.tenant ? await answerQuery(o.db, o.tenant, a.topic, protect) : "Sign in to ask about your salon.");
     if (a.type === "say") spoken.push(a.text);
   }
   actions = actions.filter((a) => a.type !== "query" && a.type !== "say");
   if (!say || spoken.length) say = [say, ...spoken].filter(Boolean).join(" ");
   if (!say) say = describe(actions, o.ctx);
+  // reply in the user's language: rules-engine sentences are translated, with every name kept on the server
+  if (o.lang && o.lang !== "en" && isTLang(o.lang) && say && detectLang(say) === "en") {
+    protect.push(...o.ctx.fields.map((f) => f.label));
+    const t = await translateKeeping(say, o.lang, protect);
+    if (t) { say = t.text; if (provider === "rules-engine") provider = `rules-engine+${t.provider}`; }
+  }
 
   if (o.db && o.tenant) {
     await o.db.from("agent_runs").insert({

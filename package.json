@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "test:integration": "node --env-file=.env.local --conditions=react-server --import tsx --test --test-concurrency=1 tests/integration/*.test.mts",
-    "worker": "node --env-file=.env.local --conditions=react-server --import tsx services/agent-worker/index.ts"
+    "worker": "node --env-file=.env.local --conditions=react-server --import tsx services/agent-worker/index.ts",
+    "i18n:extract": "node scripts/extract-ui-strings.mjs"
   },
   "dependencies": {
     "@langchain/anthropic": "1.6.5",

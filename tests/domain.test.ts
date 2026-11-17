@@ -347,7 +347,7 @@ const clientsPage: VoiceContext = {
 test("Voice agent: navigation in English, Hinglish and Indian scripts", () => {
   const dash: VoiceContext = { path: "/app", forms: [], fields: [], buttons: [] };
   for (const [say, path] of [["open bookings", "/app/bookings"], ["take me to the inbox", "/app/inbox"], ["billing", "/app/billing"], ["inventory kholo", "/app/inventory"],
-    ["बुकिंग खोलो", "/app/bookings"], ["ग्राहक दिखाओ", "/app/clients"], ["முன்பதிவு திற", "/app/bookings"], ["ان باکس کھولو", "/app/inbox"], ["show me staff payroll", "/app/staff"]] as const)
+    ["बुकिंग खोलो", "/app/bookings"], ["Open in box.", "/app/inbox"], ["ग्राहक दिखाओ", "/app/clients"], ["முன்பதிவு திற", "/app/bookings"], ["ان باکس کھولو", "/app/inbox"], ["show me staff payroll", "/app/staff"]] as const)
     assert.deepEqual(parseVoice(say, dash), [{ type: "navigate", path }], say);
   // "add client …" from another page goes to Clients first; the browser repeats the sentence there
   assert.deepEqual(parseVoice("add client name Meera phone 9876543210", dash), [{ type: "navigate", path: "/app/clients" }]);
@@ -422,4 +422,29 @@ test("Day-end closing: totals by payment mode, GST, cash to count, booth-renter 
   assert.deepEqual(d.methods, [{ method: "card", count: 1, total: 3540 }, { method: "cash", count: 2, total: 1770 }]);
   assert.equal(d.services, 4000); assert.equal(d.products, 500); assert.equal(d.tips, 150); assert.equal(d.avgTicket, 1770);
   assert.deepEqual(d.renters, [{ name: "Ravi", amount: 2050.44 }]); assert.equal(d.top[0].name, "Balayage"); assert.equal(d.top[1].value, 1500);
+});
+
+import { UI_SOURCE } from "../src/lib/i18n/app/source.ts";
+import { extract as extractUiStrings } from "../scripts/extract-ui-strings.mjs";
+
+test("Owner dashboard dictionaries: 12 languages, same keys, every key is real UI text, values in the right script", async () => {
+  const SCRIPT: Record<string, RegExp> = { hi: /[ऀ-ॿ]/, mr: /[ऀ-ॿ]/, bn: /[ঀ-৿]/, as: /[ঀ-৿]/, ta: /[஀-௿]/, te: /[ఀ-౿]/,
+    gu: /[઀-૿]/, ur: /[؀-ۿ]/, kn: /[ಀ-೿]/, or: /[଀-୿]/, ml: /[ഀ-ൿ]/, pa: /[਀-੿]/ };
+  const allow = new Set(UI_SOURCE);
+  const base = Object.keys((await import("../src/lib/i18n/app/hi.ts")).default).sort();
+  assert.ok(base.length >= 400, "core dictionary covers the most visible strings");
+  for (const [lang, re] of Object.entries(SCRIPT)) {
+    const d: Record<string, string> = (await import(`../src/lib/i18n/app/${lang}.ts`)).default;
+    assert.deepEqual(Object.keys(d).sort(), base, `${lang}: same keys as Hindi`);
+    for (const [k, v] of Object.entries(d)) {
+      assert.ok(allow.has(k), `${lang}: "${k}" is not a UI string`);
+      assert.ok(v.trim(), `${lang}: empty translation for "${k}"`);
+    }
+    const native = Object.values(d).filter((v) => re.test(v)).length / base.length;
+    assert.ok(native > 0.95, `${lang}: only ${Math.round(native * 100)}% of values are in the ${lang} script`);
+  }
+});
+
+test("UI string allowlist is up to date with the source (run npm run i18n:extract after changing copy)", () => {
+  assert.deepEqual([...UI_SOURCE], extractUiStrings());
 });

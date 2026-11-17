@@ -28,7 +28,7 @@ export type QueryTopic = (typeof QUERY_TOPICS)[number];
 export const VOICE_ROUTES: { path: string; title: string; names: string[] }[] = [
   { path: "/app", title: "Dashboard", names: ["dashboard", "home", "main page", "overview", "डैशबोर्ड", "होम", "டாஷ்போர்டு", "డాష్‌బోర్డ్", "ড্যাশবোর্ড", "ಡ್ಯಾಶ್‌ಬೋರ್ಡ್", "ڈیش بورڈ"] },
   { path: "/app/bookings", title: "Bookings", names: ["bookings", "booking", "appointments", "appointment", "calendar", "schedule", "बुकिंग", "अपॉइंटमेंट", "कैलेंडर", "முன்பதிவு", "బుకింగ్", "বুকিং", "બુકિંગ", "ಬುಕಿಂಗ್", "ബുക്കിംഗ്", "ਬੁਕਿੰਗ", "بکنگ"] },
-  { path: "/app/inbox", title: "Unified Inbox", names: ["inbox", "messages", "chats", "chat", "whatsapp", "unified inbox", "इनबॉक्स", "संदेश", "चैट", "மெசேஜ்", "సందేశాలు", "মেসেজ", "ઇનબોક્સ", "ಇನ್‌ಬಾಕ್ಸ್", "ان باکس", "پیغامات"] },
+  { path: "/app/inbox", title: "Unified Inbox", names: ["inbox", "in box", "inboxes", "messages", "chats", "chat", "whatsapp", "unified inbox", "इनबॉक्स", "संदेश", "चैट", "மெசேஜ்", "సందేశాలు", "মেসেজ", "ઇનબોક્સ", "ಇನ್‌ಬಾಕ್ಸ್", "ان باکس", "پیغامات"] },
   { path: "/app/clients", title: "Clients", names: ["clients", "client", "customers", "customer", "ग्राहक", "क्लाइंट", "வாடிக்கையாளர்", "కస్టమర్", "গ্রাহক", "ગ્રાહક", "ಗ್ರಾಹಕ", "ഉപഭോക്താ", "ਗਾਹਕ", "گاہک"] },
   { path: "/app/loyalty", title: "Memberships & Loyalty", names: ["loyalty", "memberships", "membership", "wallet", "rewards", "waitlist", "मेंबरशिप", "लॉयल्टी", "வாலட்"] },
   { path: "/app/marketing", title: "Campaigns & Deals", names: ["marketing", "campaigns", "campaign", "deals", "offers", "ऑफ़र", "ऑफर", "कैंपेन", "சலுகை", "ఆఫర్", "অফার"] },

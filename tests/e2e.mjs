@@ -11,7 +11,9 @@ const email = `e2e-${ts}@salonmind.test`;
 const shots = process.env.SHOTS_DIR;
 const log = (...a) => console.log("✔", ...a);
 
-const browser = await chromium.launch();
+// E2E_STT_WAV=/path/to/speech.wav feeds that recording to the microphone, to test on-device Whisper end to end
+const sttWav = process.env.E2E_STT_WAV;
+const browser = await chromium.launch(sttWav ? { args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", `--use-file-for-fake-audio-capture=${sttWav}`] } : {});
 const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
 const page = await ctx.newPage();
 page.setDefaultTimeout(90_000);
@@ -318,6 +320,48 @@ try {
   await shot("marketplace");
   if (!found) throw new Error("marketplace search did not find the salon");
 
+  // ── Owner dashboard in Indian languages: Hindi from the sidebar picker, a Hindi voice command, Urdu right-to-left
+  await page.goto(`${BASE}/app`);
+  await Promise.all([page.waitForEvent("load"), page.locator("aside select[aria-label='Language']").selectOption("hi")]);
+  await page.waitForFunction(() => !document.querySelector("[data-i18n-wait]"), null, { timeout: 15_000 });
+  const nav = (await page.locator("aside nav").textContent()) ?? "";
+  if (!/बुकिंग/.test(nav) || !/सेटिंग्स/.test(nav) || /Bookings|Settings/.test(nav)) throw new Error("dashboard navigation is not in Hindi: " + nav.slice(0, 120));
+  log("dashboard in Hindi:", nav.replace(/\s+/g, " ").slice(0, 90));
+  await page.goto(`${BASE}/app/bookings`);
+  // the page subtitle is not in the hand-made dictionary: it is translated at runtime by the free gateway
+  const sub = page.locator("main h1 + p").first();
+  await page.waitForFunction(() => /[\u0900-\u097F]{4}/.test(document.querySelector("main h1 + p")?.textContent ?? ""), null, { timeout: 30_000 })
+    .then(async () => log("long text translated at runtime:", (await sub.textContent().catch(() => ""))?.slice(0, 80)))
+    .catch(() => console.warn("⚠ no free translation provider answered for long dashboard text — it stays in English this run"));
+  await page.getByRole("button", { name: /वॉइस असिस्टेंट|Voice assistant/ }).first().click();
+  await page.locator("[role=dialog] select").first().selectOption("hi-IN");
+  const beforeHi = Number(await page.locator("[data-voice-assistant]").getAttribute("data-voice-count"));
+  await page.locator("[role=dialog] input[dir=auto]").fill("क्लाइंट दिखाओ");
+  await page.locator("[role=dialog] form button[type=submit]").click();
+  await page.waitForURL(/\/app\/clients/, { timeout: 30_000 });
+  await page.waitForFunction((n) => Number(document.querySelector("[data-voice-assistant]")?.getAttribute("data-voice-count")) > n, beforeHi, { timeout: 30_000 });
+  const hiReply = (await page.locator("[data-voice-assistant]").getAttribute("data-voice-reply")) ?? "";
+  log("Hindi voice command → Clients; reply:", hiReply);
+  if (!/[\u0900-\u097F]/.test(hiReply)) console.warn("⚠ voice reply stayed in English (no free translation provider answered)");
+  if (sttWav) {
+    // real audio through the microphone → no browser recogniser → server STT (none configured) → on-device Whisper
+    // after acting, the assistant shrinks to a pill: reopen the full panel to change the speech language
+    if (!(await page.locator("[role=dialog] select").first().isVisible().catch(() => false))) await page.locator("[data-voice-assistant] button[aria-expanded]").click();
+    await page.locator("[role=dialog] select").first().selectOption("en-IN");
+    await page.evaluate(() => { delete window.SpeechRecognition; delete window.webkitSpeechRecognition; });
+    await page.getByRole("button", { name: /Start listening|सुनना शुरू करें/ }).first().click();
+    await page.waitForURL(/\/app\/inbox/, { timeout: 240_000 });
+    log("on-device Whisper (Hugging Face, in the browser): spoken “open the inbox” → Inbox; assistant said:", await page.locator("[data-voice-assistant]").getAttribute("data-voice-reply"));
+  }
+  await page.locator("[data-voice-assistant] button[aria-label]").last().click().catch(() => {});
+  await ctx.addCookies([{ name: "sm_lang", value: "ur", url: BASE }]);
+  await page.goto(`${BASE}/app`);
+  if ((await page.getAttribute("[data-i18n-root]", "dir")) !== "rtl") throw new Error("Urdu dashboard should be right-to-left");
+  await page.waitForFunction(() => /بکنگز/.test(document.querySelector("aside nav")?.textContent ?? ""), null, { timeout: 15_000 });
+  log("dashboard in Urdu, right-to-left");
+  await shot("dashboard-urdu");
+  await ctx.addCookies([{ name: "sm_lang", value: "en", url: BASE }]);
+
   // ── Ctrl+K command palette: jump to a page from the keyboard
   await page.goto(`${BASE}/app`);
   await page.waitForLoadState("networkidle");
@@ -356,7 +400,7 @@ try {
     const bad = [];
     for (const lang of ["en", "ta", "ur"]) {
       await page.context().addCookies([{ name: "sm_lang", value: lang, url: BASE }]);
-      for (const r of lang === "en" ? routes : routes.filter((x) => !x.startsWith("/app"))) {
+      for (const r of lang === "ta" ? routes.filter((x) => !x.startsWith("/app")) : routes) { // Urdu also checks the right-to-left dashboard
         await m.goto(`${BASE}${r}`); await m.waitForLoadState("networkidle").catch(() => {});
         const o = await m.evaluate(() => {
           const w = document.documentElement.clientWidth;
@@ -369,9 +413,11 @@ try {
         });
         if (o.scroll > 1) bad.push(`${lang} ${r}: +${o.scroll}px ${o.wide.join(" | ")}`);
         if (shots) await m.screenshot({ path: `${shots}/m-${lang}-${r.replace(/\//g, "_") || "root"}.png`, fullPage: false });
+        if (lang === "ta" && r.endsWith("/queue") && !/டோக்கன்/.test((await m.locator("main").textContent()) ?? "")) bad.push("queue page is not in Tamil");
       }
     }
     // WhatsApp inbox on a phone: list first, then the thread with a back button
+    await page.context().addCookies([{ name: "sm_lang", value: "en", url: BASE }]);
     await m.goto(`${BASE}/app/inbox`);
     if (!(await m.locator("aside[aria-label=Conversations]").isVisible())) bad.push("mobile inbox: chat list hidden");
     await m.locator("aside[aria-label=Conversations] ul a").first().click();

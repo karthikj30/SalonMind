@@ -21,6 +21,10 @@
   log stores the kind of action taken, not what was said. Passwords, OTP / card fields and delete buttons are blocked
   in the validator that every proposed action passes through — whether it came from the rules engine or an LLM.
   Anonymous visitors (sign-in / sign-up pages) never trigger a model call.
+* **Dashboard translation:** only strings that exist in the app's source (generated allowlist `src/lib/i18n/app/source.ts`)
+  are ever sent to a translation provider; client names, notes and messages are never matched, so never sent.
+* **On-device speech:** when the browser has no speech recogniser and no server key is set, Whisper runs inside the
+  browser (Hugging Face transformers.js); the audio never leaves the device.
 * **Walk-in queue:** the public page shows token numbers and wait times only; names and phone numbers are readable
   by salon staff alone (RLS, integration test).
 * **Audit log:** migration `0007_audit_log.sql` is applied in production; the integration test proves entries cannot

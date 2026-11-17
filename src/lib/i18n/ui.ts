@@ -36,6 +36,7 @@ const en = {
   chatIntro: "Namaste! Ask about prices, free slots or book directly — e.g. “kal 6 baje haircut?”. I'll confirm before booking anything.",
   mobilePh: "Your mobile (+91…)", msgPh: "Type a message…", language: "Language",
   online: "online", typing: "typing…", openWa: "Continue on WhatsApp",
+  qTitle: "Walk-in queue · today", nowServing: "Now serving", noneServing: "No one is being served yet", nWaiting: "{n} waiting", newWait: "new walk-ins wait {wait}", yourToken: "Your token", yourTurnNow: "It's your turn — please come to the reception.", youAreNext: "You are next", nAhead: "{n} ahead of you", turnIn: "your turn is {wait}", autoRefresh: "This page refreshes by itself. We'll also message you on WhatsApp when your turn is near.", tokenGone: "This token is no longer in the queue. Take a new one below if you still need a service.", takeToken: "Take a token", takeTokenSub: "No appointment? Join the queue from your phone and wait wherever you like.", getToken: "Get my token", gettingToken: "Getting your token…", inQueue: "In the queue", beingServed: "being served", queueEmpty: "The queue is empty — walk right in.", scanJoin: "Scan to join the queue at {salon}", wNow: "now", wMin: "about {m} min", wHour: "about {h} h", wHourMin: "about {h} h {m} min", wFull: "not today — fully booked",
 };
 export type Dict = typeof en;
 
@@ -67,6 +68,7 @@ const hi: Dict = {
   chatIntro: "नमस्ते! कीमत, खाली समय पूछें या सीधे बुक करें — जैसे “कल 6 बजे हेयरकट?”। बुकिंग से पहले मैं पुष्टि लूँगा।",
   mobilePh: "आपका मोबाइल (+91…)", msgPh: "संदेश लिखें…", language: "भाषा",
   online: "ऑनलाइन", typing: "लिख रहे हैं…", openWa: "WhatsApp पर जारी रखें",
+  qTitle: "वॉक-इन कतार · आज", nowServing: "अभी सेवा में", noneServing: "अभी किसी की सेवा नहीं चल रही", nWaiting: "{n} इंतज़ार में", newWait: "नए वॉक-इन का इंतज़ार {wait}", yourToken: "आपका टोकन", yourTurnNow: "आपकी बारी है — कृपया रिसेप्शन पर आएँ।", youAreNext: "अगला नंबर आपका है", nAhead: "आपसे पहले {n}", turnIn: "आपकी बारी {wait}", autoRefresh: "यह पेज अपने आप रीफ़्रेश होता है। आपकी बारी पास आने पर हम WhatsApp पर भी बताएँगे।", tokenGone: "यह टोकन अब कतार में नहीं है। सेवा चाहिए तो नीचे नया टोकन लें।", takeToken: "टोकन लें", takeTokenSub: "अपॉइंटमेंट नहीं है? फ़ोन से कतार में जुड़ें और कहीं भी इंतज़ार करें।", getToken: "मेरा टोकन लें", gettingToken: "टोकन मिल रहा है…", inQueue: "कतार में", beingServed: "सेवा चल रही है", queueEmpty: "कतार ख़ाली है — सीधे आ जाइए।", scanJoin: "{salon} की कतार में जुड़ने के लिए स्कैन करें", wNow: "अभी", wMin: "लगभग {m} मिनट", wHour: "लगभग {h} घंटा", wHourMin: "लगभग {h} घंटा {m} मिनट", wFull: "आज नहीं — पूरी बुकिंग है",
 };
 
 const mr: Dict = {
@@ -97,6 +99,7 @@ const mr: Dict = {
   chatIntro: "नमस्कार! किंमत, मोकळी वेळ विचारा किंवा थेट बुक करा — उदा. “उद्या 6 वाजता हेअरकट?”. बुकिंगपूर्वी मी पुष्टी घेईन.",
   mobilePh: "तुमचा मोबाइल (+91…)", msgPh: "संदेश लिहा…", language: "भाषा",
   online: "ऑनलाइन", typing: "लिहित आहे…", openWa: "WhatsApp वर सुरू ठेवा",
+  qTitle: "वॉक-इन रांग · आज", nowServing: "आता सेवा सुरू", noneServing: "अजून कोणाचीही सेवा सुरू नाही", nWaiting: "{n} प्रतीक्षेत", newWait: "नवीन वॉक-इनसाठी प्रतीक्षा {wait}", yourToken: "तुमचा टोकन", yourTurnNow: "तुमची पाळी आली — कृपया रिसेप्शनवर या.", youAreNext: "पुढचा नंबर तुमचा", nAhead: "तुमच्या आधी {n}", turnIn: "तुमची पाळी {wait}", autoRefresh: "हे पेज आपोआप रिफ्रेश होते. पाळी जवळ आल्यावर WhatsApp वरही कळवू.", tokenGone: "हा टोकन आता रांगेत नाही. सेवा हवी असल्यास खाली नवीन टोकन घ्या.", takeToken: "टोकन घ्या", takeTokenSub: "अपॉइंटमेंट नाही? फोनवरून रांगेत सामील व्हा आणि कुठेही थांबा.", getToken: "माझा टोकन घ्या", gettingToken: "टोकन मिळत आहे…", inQueue: "रांगेत", beingServed: "सेवा सुरू", queueEmpty: "रांग रिकामी आहे — थेट या.", scanJoin: "{salon} च्या रांगेत सामील होण्यासाठी स्कॅन करा", wNow: "आता", wMin: "सुमारे {m} मिनिटे", wHour: "सुमारे {h} तास", wHourMin: "सुमारे {h} तास {m} मिनिटे", wFull: "आज नाही — पूर्ण बुकिंग आहे",
 };
 
 const ta: Dict = {
@@ -127,6 +130,7 @@ const ta: Dict = {
   chatIntro: "வணக்கம்! விலை, காலி நேரம் கேளுங்கள் அல்லது நேரடியாக முன்பதிவு செய்யுங்கள் — எ.கா. “நாளை 6 மணிக்கு ஹேர்கட்?”. முன்பதிவுக்கு முன் உறுதி கேட்பேன்.",
   mobilePh: "உங்கள் மொபைல் (+91…)", msgPh: "செய்தியை எழுதுங்கள்…", language: "மொழி",
   online: "ஆன்லைன்", typing: "தட்டச்சு செய்கிறது…", openWa: "WhatsApp-இல் தொடரவும்",
+  qTitle: "வாக்-இன் வரிசை · இன்று", nowServing: "இப்போது சேவையில்", noneServing: "இன்னும் யாருக்கும் சேவை நடக்கவில்லை", nWaiting: "{n} பேர் காத்திருக்கிறார்கள்", newWait: "புதிய வாக்-இன் காத்திருப்பு {wait}", yourToken: "உங்கள் டோக்கன்", yourTurnNow: "உங்கள் முறை வந்துவிட்டது — வரவேற்பறைக்கு வாருங்கள்.", youAreNext: "அடுத்தது நீங்கள்தான்", nAhead: "உங்களுக்கு முன் {n} பேர்", turnIn: "உங்கள் முறை {wait}", autoRefresh: "இந்தப் பக்கம் தானாகப் புதுப்பிக்கப்படும். உங்கள் முறை நெருங்கியதும் WhatsApp-இலும் தெரிவிப்போம்.", tokenGone: "இந்த டோக்கன் இப்போது வரிசையில் இல்லை. சேவை வேண்டுமானால் கீழே புதிய டோக்கன் பெறுங்கள்.", takeToken: "டோக்கன் பெறுங்கள்", takeTokenSub: "முன்பதிவு இல்லையா? போனிலிருந்து வரிசையில் சேர்ந்து எங்கும் காத்திருங்கள்.", getToken: "என் டோக்கனைப் பெறு", gettingToken: "டோக்கன் பெறுகிறது…", inQueue: "வரிசையில்", beingServed: "சேவை நடக்கிறது", queueEmpty: "வரிசை காலியாக உள்ளது — நேரடியாக வாருங்கள்.", scanJoin: "{salon} வரிசையில் சேர ஸ்கேன் செய்யுங்கள்", wNow: "இப்போது", wMin: "சுமார் {m} நிமிடம்", wHour: "சுமார் {h} மணி", wHourMin: "சுமார் {h} மணி {m} நிமிடம்", wFull: "இன்று இல்லை — முழுவதும் முன்பதிவு",
 };
 
 const te: Dict = {
@@ -157,6 +161,7 @@ const te: Dict = {
   chatIntro: "నమస్కారం! ధరలు, ఖాళీ సమయాలు అడగండి లేదా నేరుగా బుక్ చేయండి — ఉదా. “రేపు 6 గంటలకు హెయిర్ కట్?”. బుక్ చేసే ముందు నిర్ధారణ అడుగుతాను.",
   mobilePh: "మీ మొబైల్ (+91…)", msgPh: "సందేశం రాయండి…", language: "భాష",
   online: "ఆన్‌లైన్", typing: "టైప్ చేస్తోంది…", openWa: "WhatsAppలో కొనసాగించండి",
+  qTitle: "వాక్-ఇన్ క్యూ · ఈరోజు", nowServing: "ఇప్పుడు సేవలో", noneServing: "ఇంకా ఎవరికీ సేవ జరగడం లేదు", nWaiting: "{n} మంది వేచి ఉన్నారు", newWait: "కొత్త వాక్-ఇన్ వేచి ఉండే సమయం {wait}", yourToken: "మీ టోకెన్", yourTurnNow: "మీ వంతు వచ్చింది — దయచేసి రిసెప్షన్‌కు రండి.", youAreNext: "తదుపరి మీరే", nAhead: "మీకంటే ముందు {n}", turnIn: "మీ వంతు {wait}", autoRefresh: "ఈ పేజీ దానంతట అదే రిఫ్రెష్ అవుతుంది. మీ వంతు దగ్గరపడినప్పుడు WhatsAppలో కూడా తెలియజేస్తాం.", tokenGone: "ఈ టోకెన్ ఇప్పుడు క్యూలో లేదు. సేవ కావాలంటే కింద కొత్త టోకెన్ తీసుకోండి.", takeToken: "టోకెన్ తీసుకోండి", takeTokenSub: "అపాయింట్‌మెంట్ లేదా? ఫోన్ నుండి క్యూలో చేరి ఎక్కడైనా వేచి ఉండండి.", getToken: "నా టోకెన్ తీసుకో", gettingToken: "టోకెన్ వస్తోంది…", inQueue: "క్యూలో", beingServed: "సేవ జరుగుతోంది", queueEmpty: "క్యూ ఖాళీగా ఉంది — నేరుగా రండి.", scanJoin: "{salon} క్యూలో చేరడానికి స్కాన్ చేయండి", wNow: "ఇప్పుడే", wMin: "సుమారు {m} నిమిషాలు", wHour: "సుమారు {h} గంట", wHourMin: "సుమారు {h} గం {m} నిమి", wFull: "ఈరోజు కాదు — పూర్తిగా బుక్ అయింది",
 };
 
 const bn: Dict = {
@@ -187,6 +192,7 @@ const bn: Dict = {
   chatIntro: "নমস্কার! দাম, খালি সময় জিজ্ঞাসা করুন বা সরাসরি বুক করুন — যেমন “আগামীকাল ৬টায় চুল কাটা?”। বুক করার আগে নিশ্চিত করে নেব।",
   mobilePh: "আপনার মোবাইল (+91…)", msgPh: "বার্তা লিখুন…", language: "ভাষা",
   online: "অনলাইন", typing: "লিখছে…", openWa: "WhatsApp-এ চালিয়ে যান",
+  qTitle: "ওয়াক-ইন সারি · আজ", nowServing: "এখন পরিষেবায়", noneServing: "এখনও কারও পরিষেবা চলছে না", nWaiting: "{n} জন অপেক্ষায়", newWait: "নতুন ওয়াক-ইনের অপেক্ষা {wait}", yourToken: "আপনার টোকেন", yourTurnNow: "আপনার পালা — অনুগ্রহ করে রিসেপশনে আসুন।", youAreNext: "পরের জন আপনি", nAhead: "আপনার আগে {n} জন", turnIn: "আপনার পালা {wait}", autoRefresh: "এই পেজ নিজে থেকেই রিফ্রেশ হয়। পালা কাছে এলে WhatsApp-এও জানাব।", tokenGone: "এই টোকেন আর সারিতে নেই। পরিষেবা চাইলে নিচে নতুন টোকেন নিন।", takeToken: "টোকেন নিন", takeTokenSub: "অ্যাপয়েন্টমেন্ট নেই? ফোন থেকে সারিতে যোগ দিন, যেখানে খুশি অপেক্ষা করুন।", getToken: "আমার টোকেন নিন", gettingToken: "টোকেন আসছে…", inQueue: "সারিতে", beingServed: "পরিষেবা চলছে", queueEmpty: "সারি খালি — সরাসরি চলে আসুন।", scanJoin: "{salon}-এর সারিতে যোগ দিতে স্ক্যান করুন", wNow: "এখনই", wMin: "প্রায় {m} মিনিট", wHour: "প্রায় {h} ঘণ্টা", wHourMin: "প্রায় {h} ঘণ্টা {m} মিনিট", wFull: "আজ নয় — সব বুকড",
 };
 
 const DICTS: Record<UiLang, Dict> = { en, hi, mr, ta, te, bn, gu, kn, ml, pa, or, ur, as: asm };

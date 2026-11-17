@@ -66,9 +66,15 @@ CSV client import, stylist calendar (ICS) feeds and a face-shape style advisor.
   must be in the right script, and phone numbers / e-mails / UPI ids are masked before text leaves the server. The
   **Translator Agent** stores each salon's menu, description and deals in 12 Indian languages, the inbox has a
   **Translate** toggle, and replies can be sent in the customer's language.
+* **Owner dashboard in 13 languages** — a language picker in the sidebar (and on sign-in / sign-up) switches the whole
+  dashboard; Urdu is right-to-left. ~440 of the most visible labels are hand-translated per language (instant, offline);
+  the remaining help texts are translated once by the free gateway and cached. Only text from the app's own source code
+  is ever sent for translation — never names, notes or messages (`npm run i18n:extract` keeps that allowlist current).
 * **Voice Agent** — a microphone button on every signed-in page and on sign-in / sign-up / onboarding. Say (or type)
-  “open bookings”, “add client name Meera phone 98765 43210”, “save”, “how many bookings today?”. Speech-to-text runs
-  in the browser (free, no key) with Groq / Hugging Face Whisper as fallback. It fills and navigates; it submits only
+  “open bookings”, “add client name Meera phone 98765 43210”, “save”, “how many bookings today?” — in English or an
+  Indian language; replies come back in that language. Speech-to-text: the browser's own recogniser (free, no key) →
+  Groq / Hugging Face Whisper on the server (free key) → Hugging Face Whisper running *inside the browser* via
+  transformers.js (no key at all, audio never leaves the device). It fills and navigates; it submits only
   when told, never fills passwords and never presses a delete button. **Ctrl/⌘ K** opens the same commands by keyboard.
 * **Walk-in token queue** — tokens at the desk or by QR self check-in (`/s/<salon>/queue`), live wait estimates from
   the stylists' real calendar, “Call” seats the next customer through the scheduler; a **day-end closing** report on
@@ -92,7 +98,8 @@ with `supabase/bootstrap_agent.sql` (set your own email/password).
 
 | Provider | Get key | Env var |
 |---|---|---|
-| Groq (Llama 3.3 70B, Llama 4 Scout vision) | console.groq.com/keys | `GROQ_API_KEY` |
+| Groq (Llama 3.3 70B, Llama 4 Scout vision, Whisper speech-to-text) | console.groq.com/keys | `GROQ_API_KEY` |
+| Hugging Face (router LLMs, Whisper, opus-mt translation) | huggingface.co/settings/tokens | `HF_TOKEN` |
 | Google Gemini (2.5 Flash, embeddings, vision) | aistudio.google.com/apikey | `GEMINI_API_KEY` |
 | OpenRouter free models | openrouter.ai/keys | `OPENROUTER_API_KEY` |
 

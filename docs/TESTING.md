@@ -122,6 +122,12 @@ Everything below is entered by hand in the UI so you can watch each agent react.
 50. **Daily briefing**: add the salon phone in Settings → Agent Console → run *Daily Briefing Agent* → see the
     message in the Inbox.
 
+## 13. Dashboard in your language
+51. Sidebar footer → language picker → हिन्दी (or any of the 12). Navigation, buttons, forms and statuses switch at once;
+    longer help texts follow a moment later (translated once, then cached). Choose اردو for right-to-left.
+52. Open the voice assistant, pick हिन्दी as speech language and say `क्लाइंट दिखाओ` — it opens Clients and answers in Hindi.
+53. Firefox (no built-in speech recognition): the first voice command downloads the on-device Whisper model (~75 MB, once).
+
 ## Automated checks
 ```bash
 npm run typecheck && npm test && npm run build

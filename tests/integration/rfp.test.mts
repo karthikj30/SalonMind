@@ -24,7 +24,7 @@ const { searchMarketplace } = await import("../../src/lib/services/marketplace")
 const { issueInvoice } = await import("../../src/lib/services/invoicing");
 const { embed, toPgVector } = await import("../../src/lib/ai/embeddings");
 const { addDays, istDate, todayIst, toIst } = await import("../../src/lib/time");
-const { translate } = await import("../../src/lib/ai/translate");
+const { translate, translateKeeping } = await import("../../src/lib/ai/translate");
 const { loadTranslations } = await import("../../src/lib/agents/i18n");
 const { sourceHash } = await import("../../src/lib/domain/translate");
 const { interpretVoice } = await import("../../src/lib/agents/voice");
@@ -551,6 +551,25 @@ describe("Voice Agent — hands-free navigation, form filling and answers", () =
     assert.ok(!JSON.stringify(runs).includes("Kavya") && !JSON.stringify(runs).includes("9811100088"), "what was said (names, numbers) is not stored in the run log");
     const report = await runAgent(AGENTS.find((a) => a.id === "voice")!, { db, tenant, trigger: "manual" });
     assert.match(report.summary, /voice command\(s\) in the last 7 days/);
+  });
+});
+
+describe("Voice replies in Indian languages", () => {
+  test("A Hindi voice question is answered in Hindi; client and service names never reach the translation provider", async (t) => {
+    const ok = await fetch("https://api.mymemory.translated.net/get?q=hello&langpair=en|hi", { signal: AbortSignal.timeout(8000) }).then((r) => r.ok).catch(() => false);
+    if (!ok) return t.skip("MyMemory public API not reachable from this network");
+    const realFetch = globalThis.fetch;
+    const sent: string[] = [];
+    globalThis.fetch = ((u: RequestInfo | URL, i?: RequestInit) => { sent.push(decodeURIComponent(String(u))); return realFetch(u, i); }) as typeof fetch;
+    try {
+      const r = await translateKeeping("Next is Meera Iyer for Classic facial at 6 pm.", "hi", ["Meera Iyer", "Classic facial"]);
+      assert.ok(r, "a provider answered");
+      assert.match(r!.text, /[\u0900-\u097F]/, r!.text);
+      assert.match(r!.text, /Meera Iyer/); assert.match(r!.text, /Classic facial/);
+      assert.ok(sent.length && sent.every((u) => !u.includes("Meera") && !u.includes("Classic facial")), "names were masked in every outbound request");
+      const v = await interpretVoice({ db, tenant, text: "how many bookings today?", lang: "hi", ctx: { path: "/app", forms: [], fields: [], buttons: [] }, allowLlm: true });
+      assert.match(v.say, /[\u0900-\u097F]/, `Hindi reply expected: ${v.say}`);
+    } finally { globalThis.fetch = realFetch; }
   });
 });
 

@@ -18,10 +18,10 @@ const TIMEOUT = 9000;
 const cache = new Map<string, Translation>(); // per server instance; durable storage is the `translations` table
 const remember = (k: string, v: Translation) => { if (cache.size > 2000) cache.clear(); cache.set(k, v); return v; };
 
-async function viaLlm(texts: string[], to: TLang): Promise<(string | null)[]> {
+async function viaLlm(texts: string[], to: TLang, hint?: string): Promise<(string | null)[]> {
   if (!aiEnabled()) return texts.map(() => null);
   const r = await llmJson<{ t: string[] }>({
-    system: `You are a professional translator for Indian languages. Translate every string of the JSON array into ${LANGUAGES[to] ?? to}${to === "en" ? "" : " in its native script"}. Rules: keep brand and people names, ₹ amounts, numbers, dates, times and tokens like ⟦0⟧ exactly as they are; for salon terms use the word customers actually say (often a transliteration, e.g. facial, balayage, keratin); natural, polite, concise; do not add or drop information. Return only JSON {"t": [...]} with the same number of items in the same order.`,
+    system: `You are a professional translator for Indian languages. Translate every string of the JSON array into ${LANGUAGES[to] ?? to}${to === "en" ? "" : " in its native script"}. Rules: keep brand and people names, ₹ amounts, numbers, dates, times and tokens like ⟦0⟧ exactly as they are; for salon terms use the word customers actually say (often a transliteration, e.g. facial, balayage, keratin); natural, polite, concise; do not add or drop information.${hint ? ` ${hint}` : ""} Return only JSON {"t": [...]} with the same number of items in the same order.`,
     messages: [{ role: "user", content: JSON.stringify(texts) }], temperature: 0.1,
   }, () => ({ t: [] }));
   const out = Array.isArray(r.data?.t) && r.data.t.length === texts.length ? r.data.t : [];
@@ -32,7 +32,8 @@ async function myMemory(text: string, from: TLang, to: TLang): Promise<string | 
   const parts: string[] = [];
   for (const chunk of chunkText(text)) {
     try {
-      const u = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk)}&langpair=${from}|${to}`;
+      const de = process.env.MYMEMORY_EMAIL ? `&de=${encodeURIComponent(process.env.MYMEMORY_EMAIL)}` : "";
+      const u = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk)}&langpair=${from}|${to}${de}`;
       const res = await fetch(u, { signal: AbortSignal.timeout(TIMEOUT) });
       if (!res.ok) return null;
       const d = (await res.json()) as { responseStatus?: number | string; responseData?: { translatedText?: string } };
@@ -65,7 +66,7 @@ async function huggingFace(text: string, from: TLang, to: TLang): Promise<string
 }
 
 /** Translate several strings into one language. `from` defaults to script detection per string. */
-export async function translateBatch(texts: string[], to: string, from?: string | null): Promise<Translation[]> {
+export async function translateBatch(texts: string[], to: string, from?: string | null, opts: { hint?: string } = {}): Promise<Translation[]> {
   if (!isTLang(to)) return texts.map((text) => ({ text, provider: "none" }));
   const result: (Translation | null)[] = texts.map(() => null);
   const jobs: { i: number; src: TLang; masked: string; restore: (s: string) => string; key: string }[] = [];
@@ -79,7 +80,7 @@ export async function translateBatch(texts: string[], to: string, from?: string 
   });
   if (!jobs.length) return result as Translation[];
 
-  const llm = await viaLlm(jobs.map((j) => j.masked), to).catch(() => jobs.map(() => null));
+  const llm = await viaLlm(jobs.map((j) => j.masked), to, opts.hint).catch(() => jobs.map(() => null));
   // fall back per string, four at a time (keyless APIs take one string per request)
   let next = 0;
   const worker = async () => {
@@ -111,4 +112,18 @@ export async function llmTextIn(lang: string | null | undefined, o: Parameters<t
   if (r.provider !== "rules-engine" || !lang || lang === "en" || !isTLang(lang)) return r;
   const t = await translate(r.text, lang, "en");
   return t.provider === "none" || t.provider === "same-language" ? r : { text: t.text, provider: `rules-engine+${t.provider}` };
+}
+
+/**
+ * Translate a sentence while keeping some terms (client / service / product names) on the server: each term is
+ * swapped for a ⟦100+i⟧ token before the text is sent out and put back afterwards. null = no provider answered.
+ */
+export async function translateKeeping(text: string, to: string, keep: string[]): Promise<Translation | null> {
+  const terms = [...new Set(keep.map((k) => k?.trim()).filter((k): k is string => !!k && k.length > 1))].sort((a, b) => b.length - a.length);
+  let masked = text;
+  terms.forEach((t, i) => { masked = masked.split(t).join(`⟦${100 + i}⟧`); });
+  const r = await translate(masked, to, "en");
+  if (r.provider === "none" || r.provider === "same-language") return null;
+  const out = r.text.replace(/[⟦\[]\s*(\d+)\s*[⟧\]]/g, (m, n) => terms[Number(n) - 100] ?? m);
+  return { text: out, provider: r.provider };
 }

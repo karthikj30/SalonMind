@@ -123,6 +123,8 @@ that proves it. Three test layers:
 | Day-end closing report (payment modes, cash to count, GST bucket, booth payouts) | `domain/dayclose.ts`, Billing page | UNIT *Day-end closing…*; INT *Day-end closing adds up the real invoices…*; E2E |
 | Daily owner briefing on WhatsApp | `briefing` agent | INT *Daily Briefing Agent messages the owner once a day…* |
 | Append-only audit trail live | migration 0007 | INT *Changes to sensitive tables are logged…* |
+| Owner dashboard, sign-in / sign-up and the public queue page in 13 languages (Urdu right-to-left) | `src/lib/i18n/app/*` (hand-made, 442 strings × 12 languages), `UiTranslator`, `/api/i18n/ui` (allowlisted runtime fallback, cached per salon), queue strings in `i18n/ui*.ts` | UNIT *Owner dashboard dictionaries…*, *UI string allowlist is up to date…*; E2E Hindi dashboard, Urdu RTL dashboard at 390px, Tamil queue page |
+| Voice replies in the user's language; on-device Whisper when the browser has no recogniser and no server key | `translateKeeping` (names masked), `VoiceAssistant` (transformers.js + `onnx-community/whisper-base`) | INT *A Hindi voice question is answered in Hindi…*; E2E Hindi voice command; E2E `E2E_STT_WAV=…` real audio → on-device Whisper |
 | Phone UX: bottom tab bar, voice button, proper `tel` keyboards | `Sidebar.tsx` | E2E mobile audit (17 pages at 390px) |
 
 ## Proposal (RFP §5)

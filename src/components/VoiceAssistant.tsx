@@ -7,8 +7,39 @@ import type { VoiceAction, VoiceContext, VoiceField, VoiceForm } from "@/lib/dom
 /** Recognition languages (BCP-47). Chrome / Edge / Safari recognise these on-device or via their speech service. */
 const SPEECH_LANGS: [string, string][] = [
   ["en-IN", "English"], ["hi-IN", "हिन्दी"], ["bn-IN", "বাংলা"], ["mr-IN", "मराठी"], ["te-IN", "తెలుగు"], ["ta-IN", "தமிழ்"],
-  ["gu-IN", "ગુજરાતી"], ["ur-IN", "اردو"], ["kn-IN", "ಕನ್ನಡ"], ["ml-IN", "മലയാളം"], ["pa-IN", "ਪੰਜਾਬੀ"],
+  ["gu-IN", "ગુજરાતી"], ["ur-IN", "اردو"], ["kn-IN", "ಕನ್ನಡ"], ["ml-IN", "മലയാളം"], ["pa-IN", "ਪੰਜਾਬੀ"], ["or-IN", "ଓଡ଼ିଆ"], ["as-IN", "অসমীয়া"],
 ];
+/** Whisper language names (Odia is not in Whisper's list → auto-detect). */
+const WHISPER_LANG: Record<string, string> = {
+  en: "english", hi: "hindi", bn: "bengali", mr: "marathi", te: "telugu", ta: "tamil", gu: "gujarati", ur: "urdu", kn: "kannada", ml: "malayalam", pa: "punjabi", as: "assamese",
+};
+/** Hugging Face transformers.js (pinned) + the multilingual Whisper model, run fully in the browser — free, no key, audio never leaves the device. */
+const TRANSFORMERS_URL = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.1";
+const ON_DEVICE_MODEL = "onnx-community/whisper-base";
+type Asr = (audio: Float32Array, o: { language?: string; task: string }) => Promise<{ text?: string }>;
+let asrLoad: Promise<Asr> | null = null;
+async function onDeviceTranscribe(blob: Blob, lang: string, status: (s: string) => void): Promise<string> {
+  if (!asrLoad) {
+    asrLoad = (async () => {
+      const url = TRANSFORMERS_URL;
+      const tf = (await import(/* webpackIgnore: true */ url)) as { pipeline: (task: string, model: string, o: object) => Promise<Asr> };
+      return tf.pipeline("automatic-speech-recognition", ON_DEVICE_MODEL, {
+        dtype: "q8",
+        progress_callback: (p: { status?: string; file?: string; progress?: number }) => {
+          if (p.status === "progress" && p.file?.endsWith(".onnx") && typeof p.progress === "number") status(`Downloading the on-device speech model (one time)… ${Math.round(p.progress)}%`);
+        },
+      });
+    })().catch((e) => { asrLoad = null; throw e; });
+  }
+  const asr = await asrLoad;
+  status("Recognising speech on this device…");
+  const ctx = new AudioContext({ sampleRate: 16000 });
+  try {
+    const audio = (await ctx.decodeAudioData(await blob.arrayBuffer())).getChannelData(0);
+    const out = await asr(audio, { language: WHISPER_LANG[lang], task: "transcribe" });
+    return String(out?.text ?? "").replace(/\[[^\]]*\]|\([^)]*\)/g, "").trim(); // drop "[Music]" style tags
+  } finally { void ctx.close(); }
+}
 type Line = { who: "you" | "ai"; text: string };
 type Rec = { lang: string; interimResults: boolean; continuous: boolean; maxAlternatives: number; start(): void; stop(): void; abort(): void;
   onresult: ((e: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null;
@@ -87,6 +118,8 @@ export function VoiceAssistant({ defaultLang = "en" }: { defaultLang?: string })
   const [busy, setBusy] = useState(false);
   const [speak, setSpeak] = useState(false);
   const [typed, setTyped] = useState("");
+  const [note, setNote] = useState(""); // model download / recognition progress
+  const useRecorder = useRef(false); // set when the browser's own recognition is missing or fails for this language
   const rec = useRef<Rec | null>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const lastForm = useRef(0);
@@ -179,50 +212,80 @@ export function VoiceAssistant({ defaultLang = "en" }: { defaultLang?: string })
     setListening(false);
   }, []);
 
+  /** Record until ~1.2 s of silence after speech (or 10 s), then transcribe: server Whisper if configured, else on-device Whisper. */
+  const recordAndTranscribe = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") return say("This browser can't record audio — type the command instead.");
+    let stream: MediaStream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch { return say("Microphone access is blocked — allow it in the browser, or type the command."); }
+    const mr = new MediaRecorder(stream);
+    recorder.current = mr;
+    const chunks: Blob[] = [];
+    // tiny voice-activity detector so the user does not have to tap "stop"
+    const actx = new AudioContext();
+    const an = actx.createAnalyser();
+    actx.createMediaStreamSource(stream).connect(an);
+    const buf = new Float32Array(an.fftSize);
+    let heard = false, quietSince = 0;
+    const vad = window.setInterval(() => {
+      an.getFloatTimeDomainData(buf);
+      const rms = Math.sqrt(buf.reduce((a, x) => a + x * x, 0) / buf.length);
+      if (rms > 0.02) { heard = true; quietSince = 0; } else if (heard) { quietSince ||= Date.now(); if (Date.now() - quietSince > 1200 && mr.state === "recording") mr.stop(); }
+    }, 100);
+    mr.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    mr.onstop = async () => {
+      window.clearInterval(vad); void actx.close();
+      stream.getTracks().forEach((t) => t.stop());
+      setListening(false); setBusy(true);
+      const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
+      const code = lang.slice(0, 2);
+      try {
+        let text = "";
+        const fd = new FormData();
+        fd.set("audio", blob, "speech.webm");
+        fd.set("lang", code);
+        const res = await fetch("/api/voice/transcribe", { method: "POST", body: fd }).catch(() => null);
+        const d = res ? await res.json().catch(() => ({})) : {};
+        if (res?.ok && d.text) text = d.text;
+        else {
+          try { text = await onDeviceTranscribe(blob, code, setNote); }
+          catch { say(d.error ?? "Speech recognition is not available here — type the command instead."); }
+        }
+        setNote("");
+        if (text) await command(text);
+        else if (res?.ok || !d.error) say("I couldn't hear that — please try again.");
+      } finally { setBusy(false); setNote(""); }
+    };
+    mr.start(); setListening(true);
+    window.setTimeout(() => { if (mr.state === "recording") mr.stop(); }, 10_000);
+  }, [lang, command, say]);
+
   const listen = useCallback(async () => {
     if (listening) return stop();
     const w = window as unknown as { SpeechRecognition?: new () => Rec; webkitSpeechRecognition?: new () => Rec };
     const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition;
     setInterim("");
-    if (SR) {
-      const r = new SR();
-      rec.current = r;
-      r.lang = lang; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
-      let final = "";
-      r.onresult = (e) => {
-        let live = "";
-        for (let i = e.resultIndex; i < e.results.length; i++) (e.results[i].isFinal ? (final += e.results[i][0].transcript) : (live += e.results[i][0].transcript));
-        setInterim(final + live);
-      };
-      r.onerror = (e) => { setListening(false); if (e.error !== "no-speech" && e.error !== "aborted") say(e.error === "not-allowed" ? "Microphone access is blocked — allow it in the browser's address bar, or type the command." : `Speech recognition error: ${e.error}. You can type the command.`); };
-      r.onend = () => { setListening(false); setInterim(""); if (final.trim()) void command(final); };
-      try { r.start(); setListening(true); } catch { setListening(false); }
-      return;
-    }
-    // no built-in recognition (e.g. Firefox): record and use the server's free Whisper
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") return say("This browser can't record audio — type the command instead.");
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
-      recorder.current = mr;
-      const chunks: Blob[] = [];
-      mr.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-      mr.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        setListening(false); setBusy(true);
-        try {
-          const fd = new FormData();
-          fd.set("audio", new Blob(chunks, { type: mr.mimeType || "audio/webm" }), "speech.webm");
-          fd.set("lang", lang.slice(0, 2));
-          const res = await fetch("/api/voice/transcribe", { method: "POST", body: fd });
-          const d = await res.json().catch(() => ({}));
-          if (res.ok && d.text) await command(d.text); else say(d.error ?? "I couldn't hear that.");
-        } finally { setBusy(false); }
-      };
-      mr.start(); setListening(true);
-      window.setTimeout(() => { if (mr.state === "recording") mr.stop(); }, 12_000);
-    } catch { say("Microphone access is blocked — allow it in the browser, or type the command."); }
-  }, [listening, stop, lang, command, say]);
+    if (!SR || useRecorder.current) return recordAndTranscribe();
+    const r = new SR();
+    rec.current = r;
+    r.lang = lang; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
+    let final = "";
+    r.onresult = (e) => {
+      let live = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) (e.results[i].isFinal ? (final += e.results[i][0].transcript) : (live += e.results[i][0].transcript));
+      setInterim(final + live);
+    };
+    r.onerror = (e) => {
+      setListening(false);
+      if (e.error === "no-speech" || e.error === "aborted") return;
+      if (e.error === "not-allowed") return say("Microphone access is blocked — allow it in the browser's address bar, or type the command.");
+      // this browser cannot recognise the chosen language (or its speech service is unreachable): switch to Whisper
+      useRecorder.current = true;
+      say("Switching to Whisper speech recognition for this language — tap the microphone again.");
+    };
+    r.onend = () => { setListening(false); setInterim(""); if (final.trim()) void command(final); };
+    try { r.start(); setListening(true); } catch { setListening(false); }
+  }, [listening, stop, lang, command, say, recordAndTranscribe]);
 
   // commands typed in the Ctrl+K palette arrive here
   useEffect(() => {
@@ -256,7 +319,7 @@ export function VoiceAssistant({ defaultLang = "en" }: { defaultLang?: string })
           <div className="flex items-center gap-2 bg-plum-gradient px-3 py-2.5 text-white">
             <Mic className="h-4 w-4" aria-hidden />
             <p className="flex-1 text-sm font-semibold">Voice assistant</p>
-            <select value={lang} onChange={(e) => { setLang(e.target.value); try { localStorage.setItem("sm_voice_lang", e.target.value); } catch { /* */ } }} aria-label="Speech language" className="rounded-md bg-white/15 px-1.5 py-1 text-xs focus:outline-none [&>option]:text-ink">
+            <select value={lang} onChange={(e) => { setLang(e.target.value); useRecorder.current = false; try { localStorage.setItem("sm_voice_lang", e.target.value); } catch { /* */ } }} aria-label="Speech language" className="rounded-md bg-white/15 px-1.5 py-1 text-xs focus:outline-none [&>option]:text-ink">
               {SPEECH_LANGS.map(([c, n]) => <option key={c} value={c}>{n}</option>)}
             </select>
             <button type="button" onClick={() => { const n = !speak; setSpeak(n); try { localStorage.setItem("sm_voice_speak", n ? "1" : "0"); } catch { /* */ } if (!n) window.speechSynthesis?.cancel(); }} className="rounded-md p-1 hover:bg-white/15" aria-pressed={speak} aria-label={speak ? "Mute spoken replies" : "Speak replies aloud"} title={speak ? "Spoken replies on" : "Spoken replies off"}>
@@ -279,7 +342,7 @@ export function VoiceAssistant({ defaultLang = "en" }: { defaultLang?: string })
               <p key={i} dir="auto" className={`max-w-[92%] whitespace-pre-wrap rounded-2xl px-3 py-1.5 ${l.who === "you" ? "ml-auto rounded-br-md bg-rose-gold text-white" : "rounded-bl-md bg-surface text-brand-950 shadow-soft"}`} data-voice={l.who}>{l.text}</p>
             ))}
             {interim && <p dir="auto" className="ml-auto max-w-[92%] rounded-2xl rounded-br-md bg-rose-gold/60 px-3 py-1.5 italic text-white">{interim}…</p>}
-            {busy && <p className="flex items-center gap-1.5 text-xs text-brand-900/50"><Loader2 className="h-3.5 w-3.5 animate-spin" />Working…</p>}
+            {busy && <p className="flex items-center gap-1.5 text-xs text-brand-900/50" data-voice-status><Loader2 className="h-3.5 w-3.5 animate-spin" />{note || "Working…"}</p>}
             <div ref={logEnd} />
           </div>
           <form onSubmit={(e) => { e.preventDefault(); const t = typed; setTyped(""); void command(t); }} className="flex items-center gap-1.5 border-t border-brand-100 p-2">

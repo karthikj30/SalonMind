@@ -7,9 +7,15 @@ import { Sidebar } from "./Sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { VoiceAssistant } from "@/components/VoiceAssistant";
 import { CommandPalette } from "@/components/CommandPalette";
+import { UiTranslator } from "@/components/UiTranslator";
+import { LanguagePicker } from "@/components/LanguagePicker";
+import { getDict } from "@/lib/i18n/server";
+import { isRtl } from "@/lib/i18n/ui";
+import { appDict } from "@/lib/i18n/app";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { tenant, salons, user } = await getTenantContext();
+  const { lang } = await getDict(); // same language cookie as the consumer pages
   const footer = (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
@@ -17,7 +23,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <span className={`h-2 w-2 rounded-full ${aiEnabled() ? "animate-pulse bg-emerald-400" : "bg-gold-400"}`} aria-hidden />
           {aiEnabled() ? "AI models connected" : "Rules mode · add AI key"}
         </p>
-        <ThemeToggle className="-mr-2 text-onplum/80" />
+        <span className="-mr-2 flex items-center">
+          <LanguagePicker value={lang} label="Language" reload className="text-onplum/80 hover:bg-white/10" />
+          <ThemeToggle className="text-onplum/80" />
+        </span>
       </div>
       {salons.length > 1 && (
         <form action={switchSalon} className="flex gap-1">
@@ -35,12 +44,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     </div>
   );
   return (
-    <div className="flex min-h-screen flex-col md:flex-row">
+    <div data-i18n-root data-i18n-wait={lang !== "en" ? "" : undefined} lang={lang} dir={isRtl(lang) ? "rtl" : undefined} className="flex min-h-screen flex-col md:flex-row">
+      <UiTranslator lang={lang} dict={appDict(lang)} />
       <Sidebar salon={tenant.name} footer={footer} />
       <main className="min-w-0 flex-1 px-4 pb-24 pt-5 sm:px-6 md:px-8 md:py-8">
         <div className="mx-auto max-w-[1400px] animate-fade-in">{children}</div>
       </main>
-      <VoiceAssistant defaultLang={tenant.settings.default_language} />
+      <VoiceAssistant defaultLang={lang !== "en" ? lang : tenant.settings.default_language} />
       <CommandPalette />
     </div>
   );

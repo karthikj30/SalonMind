@@ -3,8 +3,8 @@ import { useRouter } from "next/navigation";
 import { Languages } from "lucide-react";
 import { LANG_COOKIE, UI_LANGS } from "@/lib/i18n/ui";
 
-/** Consumer-page language switch; remembered in a cookie so server-rendered pages come back translated. */
-export function LanguagePicker({ value, label, className = "" }: { value: string; label: string; className?: string }) {
+/** Language switch (consumer pages and the owner dashboard); remembered in a cookie so pages come back translated. */
+export function LanguagePicker({ value, label, className = "", reload = false }: { value: string; label: string; className?: string; reload?: boolean }) {
   const router = useRouter();
   return (
     <label className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs ${className}`}>
@@ -13,7 +13,7 @@ export function LanguagePicker({ value, label, className = "" }: { value: string
       <select
         value={value}
         aria-label={label}
-        onChange={(e) => { document.cookie = `${LANG_COOKIE}=${e.target.value}; path=/; max-age=31536000; samesite=lax`; router.refresh(); }}
+        onChange={(e) => { document.cookie = `${LANG_COOKIE}=${e.target.value}; path=/; max-age=31536000; samesite=lax`; if (reload) window.location.reload(); else router.refresh(); }}
         className="cursor-pointer bg-transparent focus:outline-none [&>option]:text-ink"
       >
         {UI_LANGS.map(([k, n]) => <option key={k} value={k}>{n}</option>)}

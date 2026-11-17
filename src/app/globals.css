@@ -44,6 +44,7 @@
   .dark ::-webkit-calendar-picker-indicator { filter: invert(.85); }
 }
 
+@keyframes i18n-reveal { to { visibility: visible; } }
 @keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
 /* smooth cross-fade only while the user switches theme */
@@ -66,6 +67,8 @@
   .wa-tail.wa-out::before { right: -8px; border-top-color: var(--wa-out); border-right: 8px solid transparent; }
   .wa-meta { color: var(--wa-meta); }
   /* field just filled by the Voice Agent */
+  /* non-English dashboard: hide the English first paint until the translator has run (CSS failsafe after 1.2 s) */
+  [data-i18n-wait] { visibility: hidden; animation: i18n-reveal 0s linear 1.2s forwards; }
   .voice-filled { outline: 2px solid rgb(var(--gold-400)); outline-offset: 2px; background-color: rgb(var(--gold-50)) !important; transition: background-color .4s ease; }
   .salon-pattern {
     background-image: radial-gradient(rgba(201,160,67,.18) 1px, transparent 1px), radial-gradient(rgba(201,160,67,.10) 1px, transparent 1px);
