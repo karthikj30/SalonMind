@@ -1,7 +1,9 @@
 import "server-only";
 import type { AgentDef } from "./types";
 import { buildReturns, computeInvoice, type TaxLine } from "../domain/gst";
-import { checkoutPricing, walletSplit } from "../domain/loyalty";
+import { checkoutPricing } from "../domain/loyalty";
+import { pickPackage, prepaidSplit } from "../domain/prepaid";
+import { findUsableGiftCard } from "../services/prepaid";
 import { activeMembership, issueInvoice } from "../services/invoicing";
 import { inr, todayIst } from "../time";
 import { llmText } from "../ai/llm";
@@ -11,11 +13,11 @@ export const billingAgent: AgentDef = {
   id: "billing",
   name: "Billing & POS Agent",
   module: "Billing, POS & GST",
-  description: "On service completion: applies membership discount & loyalty points, takes prepaid-wallet payment, issues a GST e-invoice (CGST/SGST or IGST), computes split payouts (owner / booth renter / tax bucket) and consumes inventory per service recipe.",
+  description: "On service completion: uses a prepaid package session if the client has one, applies membership discount & loyalty points, takes gift-card and prepaid-wallet payment, issues a GST e-invoice (CGST/SGST or IGST), computes split payouts (owner / booth renter / tax bucket) and consumes inventory per service recipe.",
   subscribes: ["booking.completed"],
   periodic: false,
   async run({ db, tenant }, ev) {
-    const p = ev!.payload as { booking_id: string; payment_method?: string; products?: { product_id: string; qty: number }[]; redeem_points?: boolean; use_wallet?: boolean };
+    const p = ev!.payload as { booking_id: string; payment_method?: string; products?: { product_id: string; qty: number }[]; redeem_points?: boolean; use_wallet?: boolean; use_package?: boolean; gift_card_code?: string };
     const { data: b } = await db.from("bookings").select("*, services(name, sac), staff(id, name, employment_type, booth_rent_pct), clients(id, name, wallet_balance, loyalty_points)").eq("id", p.booking_id).single();
     if (!b) return { summary: "Booking not found" };
     const { data: existing } = await db.from("invoices").select("id").eq("booking_id", b.id).maybeSingle();
@@ -23,8 +25,25 @@ export const billingAgent: AgentDef = {
     const actions = [];
     const client = b.clients as { id: string; name: string; wallet_balance: number; loyalty_points: number } | null;
     const membership = client ? await activeMembership(db, client.id) : null;
+    // A prepaid package already paid (and was GST-invoiced) for this service: the visit is billed at ₹0.
+    let pkgLabel: string | null = null;
+    if (client && p.use_package !== false && b.service_id) {
+      const { data: pkgs } = await db.from("client_packages").select("id, service_id, sessions_left, sessions_total, expires_at, package_plans(name)")
+        .eq("tenant_id", tenant.id).eq("client_id", client.id).eq("service_id", b.service_id).gt("sessions_left", 0);
+      const pkg = pickPackage(pkgs ?? [], b.service_id, todayIst());
+      if (pkg) {
+        // conditional update so two tills can never consume the same last session
+        const { data: used } = await db.from("client_packages").update({ sessions_left: pkg.sessions_left - 1 })
+          .eq("id", pkg.id).eq("sessions_left", pkg.sessions_left).select("id").maybeSingle();
+        if (used) {
+          const name = (pkg.package_plans as unknown as { name: string } | null)?.name ?? "package";
+          pkgLabel = `${name} ${pkg.sessions_total - pkg.sessions_left + 1}/${pkg.sessions_total}`;
+          actions.push({ type: "package", label: `Used package session ${pkgLabel} (${pkg.sessions_left - 1} left)`, ref: pkg.id });
+        }
+      }
+    }
     const pricing = checkoutPricing({
-      servicePrice: Number(b.price), membershipPct: membership?.discount_pct ?? 0, pointsBalance: Number(client?.loyalty_points ?? 0),
+      servicePrice: pkgLabel ? 0 : Number(b.price), membershipPct: membership?.discount_pct ?? 0, pointsBalance: Number(client?.loyalty_points ?? 0),
       redeemPoints: !!p.redeem_points, maxRedeemPct: tenant.settings.loyalty_max_redeem_pct,
     });
     if (membership) actions.push({ type: "membership", label: `${membership.name}: −${inr(pricing.membershipDiscount)} (${membership.discount_pct}%)` });
@@ -34,7 +53,7 @@ export const billingAgent: AgentDef = {
       actions.push({ type: "points", label: `Redeemed ${pricing.pointsUsed} points (−${inr(pricing.pointsUsed)})` });
     }
     const gstRate = tenant.settings.gst_rate;
-    const lines: TaxLine[] = [{ description: b.services?.name ?? "Salon service", kind: "service", code: b.services?.sac ?? "999721", qty: 1, rate: gstRate, unit_price: pricing.taxableService, staff_id: b.staff_id }];
+    const lines: TaxLine[] = [{ description: `${b.services?.name ?? "Salon service"}${pkgLabel ? ` (prepaid package session ${pkgLabel})` : ""}`, kind: "service", code: b.services?.sac ?? "999721", qty: 1, rate: gstRate, unit_price: pricing.taxableService, staff_id: b.staff_id }];
     for (const it of p.products ?? []) {
       const { data: prod } = await db.from("products").select("*").eq("id", it.product_id).single();
       if (!prod) continue;
@@ -51,21 +70,33 @@ export const billingAgent: AgentDef = {
     }
     if (recipe?.length) actions.push({ type: "inventory", label: `Consumed ${recipe.length} back-bar product(s) per recipe` });
 
-    // prepaid wallet pays first, the rest goes over the chosen rail
+    // gift card pays first, then the prepaid wallet, the rest goes over the chosen rail (all after tax)
     const preview = computeInvoice(lines, tenant.state_code, tenant.state_code);
-    const ws = walletSplit(Math.max(0, preview.total - Number(b.deposit_paid)), Number(client?.wallet_balance ?? 0), !!p.use_wallet);
-    if (ws.fromWallet > 0 && client) {
-      await db.from("clients").update({ wallet_balance: Math.round((Number(client.wallet_balance) - ws.fromWallet) * 100) / 100 }).eq("id", client.id);
-      await db.from("wallet_transactions").insert({ tenant_id: tenant.id, client_id: client.id, kind: "spend", amount: -ws.fromWallet, ref: b.id, note: "service checkout" });
-      actions.push({ type: "wallet", label: `Paid ${inr(ws.fromWallet)} from prepaid wallet` });
+    let gift: Awaited<ReturnType<typeof findUsableGiftCard>> | null = null;
+    if (p.gift_card_code) {
+      try { gift = await findUsableGiftCard(db, tenant.id, p.gift_card_code); }
+      catch (e) { actions.push({ type: "gift_card", label: `Gift card not applied — ${(e as Error).message}` }); }
+    }
+    const ps = prepaidSplit(Math.max(0, preview.total - Number(b.deposit_paid)), { giftBalance: Number(gift?.balance ?? 0), walletBalance: Number(client?.wallet_balance ?? 0), useWallet: !!p.use_wallet });
+    if (gift && ps.fromGift > 0) {
+      const left = Math.round((Number(gift.balance) - ps.fromGift) * 100) / 100;
+      const { data: ok } = await db.from("gift_cards").update({ balance: left, status: left <= 0 ? "redeemed" : "active" })
+        .eq("id", gift.id).eq("balance", gift.balance).select("id").maybeSingle();
+      if (ok) actions.push({ type: "gift_card", label: `Gift card ${gift.code}: −${inr(ps.fromGift)} (${inr(left)} left)`, ref: gift.id });
+      else { ps.remaining += ps.fromGift; ps.fromGift = 0; actions.push({ type: "gift_card", label: `Gift card ${gift.code} changed during checkout — not applied` }); }
+    }
+    if (ps.fromWallet > 0 && client) {
+      await db.from("clients").update({ wallet_balance: Math.round((Number(client.wallet_balance) - ps.fromWallet) * 100) / 100 }).eq("id", client.id);
+      await db.from("wallet_transactions").insert({ tenant_id: tenant.id, client_id: client.id, kind: "spend", amount: -ps.fromWallet, ref: b.id, note: "service checkout" });
+      actions.push({ type: "wallet", label: `Paid ${inr(ps.fromWallet)} from prepaid wallet` });
     }
     const method = p.payment_method ?? "upi";
     const renter = b.staff?.employment_type === "booth_renter" ? { name: b.staff.name, booth_rent_pct: Number(b.staff.booth_rent_pct) } : null;
     const r = await issueInvoice(db, tenant, {
-      booking_id: b.id, client_id: b.client_id, lines, method, renter, depositPaid: Number(b.deposit_paid), walletUsed: ws.fromWallet,
-      extra: { membership_discount: pricing.membershipDiscount, points_redeemed: pricing.pointsUsed },
+      booking_id: b.id, client_id: b.client_id, lines, method, renter, depositPaid: Number(b.deposit_paid), walletUsed: ps.fromWallet, giftCardUsed: ps.fromGift,
+      extra: { membership_discount: pricing.membershipDiscount, points_redeemed: pricing.pointsUsed, ...(ps.fromGift ? { gift_card_code: gift?.code } : {}), ...(pkgLabel ? { package_session: pkgLabel } : {}) },
     });
-    actions.unshift({ type: "invoice", label: `Invoice ${r.number}: ${inr(r.inv.total)} (CGST ${inr(r.inv.cgst)} + SGST ${inr(r.inv.sgst)}${r.inv.igst ? " + IGST " + inr(r.inv.igst) : ""}) via ${ws.remaining > 0 ? method.toUpperCase() : "WALLET"}`, ref: r.id });
+    actions.unshift({ type: "invoice", label: `Invoice ${r.number}: ${inr(r.inv.total)} (CGST ${inr(r.inv.cgst)} + SGST ${inr(r.inv.sgst)}${r.inv.igst ? " + IGST " + inr(r.inv.igst) : ""}) via ${ps.remaining > 0 ? method.toUpperCase() : ps.fromGift ? "GIFT CARD" : ps.fromWallet ? "WALLET" : "PREPAID"}`, ref: r.id });
     if (renter) actions.push({ type: "split", label: `Booth renter ${renter.name} payout ${inr(r.splits.booth_renter!.amount)}` });
     return {
       summary: `Issued ${r.number} for ${inr(r.inv.total)}; owner share ${inr(r.splits.salon_owner)}, tax bucket ${inr(r.splits.tax_bucket)}.`, actions,

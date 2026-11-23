@@ -76,6 +76,8 @@ export default async function Bookings({ searchParams }: { searchParams: Promise
                           <Input name="review" placeholder="Client review (any language)" />
                           <label className="flex items-center gap-1"><input type="checkbox" name="redeem_points" /> Redeem loyalty points</label>
                           <label className="flex items-center gap-1"><input type="checkbox" name="use_wallet" /> Pay from prepaid wallet</label>
+                          <label className="flex items-center gap-1"><input type="checkbox" name="use_package" defaultChecked /> Use a prepaid package session</label>
+                          <Input name="gift_card_code" placeholder="Gift card code GC-XXXX-XXXX" autoComplete="off" />
                           <p className="text-[10px] text-brand-900/40">Active membership discount applies automatically.</p>
                           <SubmitButton className="w-full">Complete</SubmitButton>
                         </form>

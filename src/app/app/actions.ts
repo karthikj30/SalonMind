@@ -5,6 +5,7 @@ import { emit, processEvents, tick, runAgent } from "@/lib/agents/runtime";
 import { AGENTS } from "@/lib/agents/registry";
 import { createBooking, findOrCreateClient, logPastVisit, rescheduleBooking } from "@/lib/services/booking";
 import { issueInvoice } from "@/lib/services/invoicing";
+import { sellGiftCard, sellPackage } from "@/lib/services/prepaid";
 import { importClients } from "@/lib/services/clientsImport";
 import { encryptField } from "@/lib/security/crypto";
 import { receiveMessage } from "@/lib/agents/crm";
@@ -165,7 +166,8 @@ export async function completeBooking(fd: FormData) {
   if (n(fd, "tip") > 0 && b?.staff_id) await db.from("staff_adjustments").insert({ tenant_id: tenant.id, staff_id: b.staff_id, kind: "tip", amount: n(fd, "tip"), note: "client tip" });
   const products = s(fd, "product_id") ? [{ product_id: s(fd, "product_id"), qty: n(fd, "product_qty", 1) }] : [];
   await emit(db, tenant.id, "booking.completed", { booking_id: id, payment_method: s(fd, "payment_method") || "upi", products,
-    redeem_points: fd.get("redeem_points") === "on", use_wallet: fd.get("use_wallet") === "on" }, "pos");
+    redeem_points: fd.get("redeem_points") === "on", use_wallet: fd.get("use_wallet") === "on",
+    use_package: fd.get("use_package") === "on", gift_card_code: s(fd, "gift_card_code") || undefined }, "pos");
   if (review || rating) await emit(db, tenant.id, "booking.reviewed", { booking_id: id }, "pos");
   await processEvents(db, tenant);
   done(`/app/bookings?date=${s(fd, "date")}`, "Completed → invoice issued, inventory consumed, client scored. See Billing & Agent Console.");
@@ -502,6 +504,54 @@ export async function walletTopup(fd: FormData) {
   await db.from("clients").update({ wallet_balance: Number(c?.wallet_balance ?? 0) + amt }).eq("id", clientId);
   await db.from("wallet_transactions").insert({ tenant_id: tenant.id, client_id: clientId, kind: "topup", amount: amt, note: `via ${s(fd, "payment_method") || "upi"}` });
   done("/app/loyalty", "Wallet topped up. (GST is charged when the balance is redeemed against a service.)");
+}
+
+// ───────────── Gift cards & prepaid packages ─────────────
+export async function sellGiftCardAction(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  let code = "";
+  try {
+    const g = await sellGiftCard(db, tenant, {
+      amount: n(fd, "amount"), validity_days: n(fd, "validity_days", 365), payment_method: s(fd, "payment_method") || "upi",
+      buyer_name: s(fd, "buyer_name"), buyer_phone: s(fd, "buyer_phone").replace(/\s+/g, ""),
+      recipient_name: s(fd, "recipient_name"), recipient_phone: s(fd, "recipient_phone").replace(/\s+/g, ""), message: s(fd, "message"),
+    });
+    code = g.code;
+    await processEvents(db, tenant);
+  } catch (e) {
+    fail("/app/loyalty", (e as Error).message);
+  }
+  done("/app/loyalty", `Gift card ${code} issued — the code was sent on WhatsApp. No GST now: it is charged on the service when the card is redeemed.`);
+}
+
+export async function voidGiftCard(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  await db.from("gift_cards").update({ status: "void" }).eq("id", s(fd, "id")).eq("tenant_id", tenant.id);
+  done("/app/loyalty", "Gift card cancelled.");
+}
+
+export async function createPackagePlan(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  const { error } = await db.from("package_plans").insert({
+    tenant_id: tenant.id, name: s(fd, "name"), service_id: s(fd, "service_id"), sessions: n(fd, "sessions", 5),
+    price: n(fd, "price"), validity_days: n(fd, "validity_days", 180),
+  });
+  if (error) fail("/app/loyalty", error.message);
+  done("/app/loyalty", "Package created.");
+}
+
+export async function sellPackageAction(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  let msg = "";
+  try {
+    if (!s(fd, "client_id") || !s(fd, "plan_id")) throw new Error("Choose a client and a package");
+    const r = await sellPackage(db, tenant, { client_id: s(fd, "client_id"), plan_id: s(fd, "plan_id"), payment_method: s(fd, "payment_method") || "upi" });
+    await processEvents(db, tenant);
+    msg = `Sold ${r.plan.name} — invoice ${r.invoice.number} (${r.invoice.inv.total}). Sessions are used automatically at checkout.`;
+  } catch (e) {
+    fail("/app/loyalty", (e as Error).message);
+  }
+  done("/app/loyalty", msg);
 }
 
 // ───────────── Ported from open source: CSV import (pronto), human handoff (Kontor) ─────────────

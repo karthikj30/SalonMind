@@ -448,3 +448,48 @@ test("Owner dashboard dictionaries: 12 languages, same keys, every key is real U
 test("UI string allowlist is up to date with the source (run npm run i18n:extract after changing copy)", () => {
   assert.deepEqual([...UI_SOURCE], extractUiStrings());
 });
+
+import { giftCode, normalizeGiftCode, giftCardUsable, prepaidSplit, pickPackage, packageSaving, expiryReminderStage, manageWindow } from "../src/lib/domain/prepaid.ts";
+
+test("Gift cards: codes are readable, normalised from what a cashier types, and validated", () => {
+  const code = giftCode();
+  assert.match(code, /^GC-[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}$/);
+  assert.equal(normalizeGiftCode(code.toLowerCase().replace(/-/g, " ")), code);
+  assert.equal(normalizeGiftCode("gc7kqmx2pa"), "GC-7KQM-X2PA");
+  assert.equal(normalizeGiftCode("GC-123"), null);
+  assert.deepEqual(giftCardUsable({ balance: 500, expires_at: "2026-12-31", status: "active" }, "2026-11-23"), { ok: true });
+  assert.equal(giftCardUsable({ balance: 500, expires_at: "2026-11-22", status: "active" }, "2026-11-23").ok, false);
+  assert.equal(giftCardUsable({ balance: 0, expires_at: "2026-12-31", status: "redeemed" }, "2026-11-23").ok, false);
+});
+
+test("Prepaid split: gift card first, then wallet, then the payment rail — never more than due", () => {
+  assert.deepEqual(prepaidSplit(1180, { giftBalance: 1000, walletBalance: 500, useWallet: true }), { fromGift: 1000, fromWallet: 180, remaining: 0 });
+  assert.deepEqual(prepaidSplit(1180, { giftBalance: 2000 }), { fromGift: 1180, fromWallet: 0, remaining: 0 });
+  assert.deepEqual(prepaidSplit(1180, { giftBalance: 300, walletBalance: 500, useWallet: false }), { fromGift: 300, fromWallet: 0, remaining: 880 });
+  assert.deepEqual(prepaidSplit(-5, { giftBalance: 300 }), { fromGift: 0, fromWallet: 0, remaining: 0 });
+});
+
+test("Packages: consume the session that expires first; skip used-up or expired ones", () => {
+  const pk = [
+    { id: "late", service_id: "s1", sessions_left: 3, expires_at: "2027-03-01" },
+    { id: "soon", service_id: "s1", sessions_left: 1, expires_at: "2026-12-01" },
+    { id: "empty", service_id: "s1", sessions_left: 0, expires_at: "2026-11-30" },
+    { id: "old", service_id: "s1", sessions_left: 2, expires_at: "2026-11-01" },
+    { id: "other", service_id: "s2", sessions_left: 5, expires_at: "2026-11-25" },
+  ];
+  assert.equal(pickPackage(pk, "s1", "2026-11-23")?.id, "soon");
+  assert.equal(pickPackage(pk, "s3", "2026-11-23"), null);
+  assert.deepEqual(packageSaving({ sessions: 5, price: 2000, servicePrice: 500 }), { full: 2500, saving: 500, perSession: 400 });
+});
+
+test("Prepaid reminders and the customer self-service window", () => {
+  assert.equal(expiryReminderStage("2026-12-20", "2026-11-23"), null);
+  assert.equal(expiryReminderStage("2026-12-05", "2026-11-23"), "first");
+  assert.equal(expiryReminderStage("2026-11-25", "2026-11-23"), "last");
+  assert.equal(expiryReminderStage("2026-11-20", "2026-11-23"), null);
+  const now = new Date("2026-11-23T10:00:00Z");
+  assert.deepEqual(manageWindow({ status: "booked", start_at: "2026-11-23T15:00:00Z" }, now), { canChange: true });
+  assert.deepEqual(manageWindow({ status: "booked", start_at: "2026-11-23T11:00:00Z" }, now), { canChange: false, reason: "too_late" });
+  assert.deepEqual(manageWindow({ status: "cancelled", start_at: "2026-11-24T11:00:00Z" }, now), { canChange: false, reason: "closed" });
+  assert.deepEqual(manageWindow({ status: "booked", start_at: "2026-11-23T09:00:00Z" }, now), { canChange: false, reason: "past" });
+});

@@ -18,6 +18,7 @@ import { getDict } from "@/lib/i18n/server";
 import { isRtl } from "@/lib/i18n/ui";
 import { loadTranslations } from "@/lib/agents/i18n";
 import { fill } from "@/lib/i18n/ui";
+import { manageDict } from "@/lib/i18n/manage";
 import { ArrowLeft, CheckCircle2, Clock, MapPin, Star, Ticket } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -46,10 +47,10 @@ export default async function SalonPage({ params, searchParams }: { params: Prom
   const date = sp.date && sp.date !== "null" ? sp.date : todayIst();
   const plan = serviceId ? await planBooking(db, tenant, { service_id: serviceId, date }, 12).catch(() => null) : null;
   const slots = (plan?.slots ?? []).sort((a, b) => a.start.getTime() - b.start.getTime());
-  type Booked = { start_at: string; price: number; deposit_required: number; services: { name: string } | null; staff: { name: string } | null };
+  type Booked = { start_at: string; price: number; deposit_required: number; manage_token: string; services: { name: string } | null; staff: { name: string } | null };
   let booked: Booked | null = null;
   let payQr: { link: string; svg: string } | null = null;
-  if (sp.booked) booked = (await db.from("bookings").select("start_at, price, deposit_required, no_show_risk, services(name), staff(name)").eq("id", sp.booked).eq("tenant_id", tenant.id).single()).data as unknown as Booked;
+  if (sp.booked) booked = (await db.from("bookings").select("start_at, price, deposit_required, no_show_risk, manage_token, services(name), staff(name)").eq("id", sp.booked).eq("tenant_id", tenant.id).single()).data as unknown as Booked;
   if (booked && Number(booked.deposit_required) > 0 && tenant.upi_vpa) {
     try { const link = upiLink({ vpa: tenant.upi_vpa, name: tenant.name, amount: Number(booked.deposit_required), note: `Deposit ${booked.services?.name ?? ""}`.trim(), ref: String(sp.booked).slice(0, 12) }); payQr = { link, svg: await qrSvg(link) }; } catch { /* bad VPA */ }
   }
@@ -88,6 +89,7 @@ export default async function SalonPage({ params, searchParams }: { params: Prom
           <div className="mt-5 animate-fade-in rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm">
             <p className="flex items-center gap-2 font-semibold text-emerald-900"><CheckCircle2 className="h-5 w-5" />{tx.booked}: {booked.services?.name} · {booked.staff?.name} · {fmtDateTime(booked.start_at)} — {inr(booked.price)} + GST</p>
             {Number(booked.deposit_required) > 0 ? <p className="mt-1 text-amber-800 dark:text-amber-300">{fill(tx.depositNote, { amt: inr(booked.deposit_required) })}</p> : <p className="mt-1 text-emerald-800 dark:text-emerald-300">{tx.confirmNote}</p>}
+            <p className="mt-2"><Link href={`/b/${booked.manage_token}`} className="font-medium text-brand-700 underline underline-offset-2" data-manage-link>{manageDict(lang).manageLink}</Link></p>
             {payQr && (
               <div className="mt-4 flex flex-wrap items-center gap-5">
                 <div className="h-[180px] w-[180px] rounded-xl bg-[#fff] p-1 shadow-soft" dangerouslySetInnerHTML={{ __html: payQr.svg }} />

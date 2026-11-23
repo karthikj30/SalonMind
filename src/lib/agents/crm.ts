@@ -1,4 +1,5 @@
 import "server-only";
+import { manageLink } from "../services/prepaid";
 import type { AgentDef, Tenant } from "./types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { churnRisk, lexiconSentiment, visitCycle } from "../domain/crm";
@@ -195,7 +196,7 @@ export const conciergeAgent: AgentDef = {
         try {
           const r = await createBooking(db, tenant, { client_id: prop.client_id, service_id: prop.service_id, date: prop.date, time: prop.time.slice(0, 5), source: msg.channel });
           await db.from("booking_proposals").update({ status: "confirmed", booking_id: r.booking.id }).eq("id", prop.id);
-          const body = tr(rl, "confirmed", { service: r.service.name, when: fmtDateTime(r.booking.start_at), stylist: r.slot.staff.name, price: inr(r.booking.price) });
+          const body = tr(rl, "confirmed", { service: r.service.name, when: fmtDateTime(r.booking.start_at), stylist: r.slot.staff.name, price: inr(r.booking.price) }) + manageSuffix(r.booking.manage_token);
           await sendMessage(db, { tenant_id: tenant.id, client_id: prop.client_id, contact_handle: handle, phone: client?.phone, channel: msg.channel, body, agent: "concierge", meta: { intent: "proposal_confirmed" } });
           return { summary: `[${msg.channel}] customer confirmed proposal → booked ${r.service.name} ${fmtDateTime(r.booking.start_at)}.`, actions: [{ type: "booking", label: `Booked ${r.service.name} at ${fmtDateTime(r.booking.start_at)} (customer confirmed)`, ref: r.booking.id }] };
         } catch (e) {
@@ -217,7 +218,7 @@ export const conciergeAgent: AgentDef = {
         try {
           const r = await createBooking(db, tenant, { client_id: client.id, service_id: offer.service_id, date: t.date, time: t.time, source: "waitlist" });
           await db.from("waitlist").update({ status: "booked", booking_id: r.booking.id }).eq("id", offer.id);
-          const body = tr(rl, "confirmed", { service: r.service.name, when: fmtDateTime(r.booking.start_at), stylist: r.slot.staff.name, price: inr(r.booking.price) });
+          const body = tr(rl, "confirmed", { service: r.service.name, when: fmtDateTime(r.booking.start_at), stylist: r.slot.staff.name, price: inr(r.booking.price) }) + manageSuffix(r.booking.manage_token);
           await sendMessage(db, { tenant_id: tenant.id, client_id: client.id, contact_handle: handle, phone: client.phone, channel: msg.channel, body, agent: "concierge", meta: { intent: "waitlist_accept" } });
           return { summary: `[${msg.channel}] ${client.name} accepted waitlist offer → booked ${fmtDateTime(r.booking.start_at)}.`, actions: [{ type: "booking", label: `Waitlist → booking for ${client.name}`, ref: r.booking.id }] };
         } catch (e) {
@@ -317,4 +318,10 @@ export async function receiveMessage(db: SupabaseClient, tenantId: string, m: { 
   if (error) throw new Error(error.message);
   await db.from("agent_events").insert({ tenant_id: tenantId, type: "message.received", payload: { message_id: data.id }, source: m.channel });
   return data.id as string;
+}
+
+/** The customer's self-service link, appended to confirmations verbatim (never sent through a model). */
+function manageSuffix(token: string | null | undefined) {
+  const url = token ? manageLink(token) : "";
+  return url.startsWith("http") ? `\n${url}` : "";
 }

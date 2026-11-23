@@ -67,7 +67,7 @@ flowchart LR
   `message.received`, `usage.logged`, `job.created`, …) and agents themselves (`po.drafted`,
   `client.at_risk`, `staff.waste_flag`, `stock.check`). Consumers claim events optimistically
   (`pending → processing` compare-and-set) so concurrent invocations never double-process.
-* **Agents** (`src/lib/agents/*`, 20 agents) are plain async functions with a declared `subscribes[]` and
+* **Agents** (`src/lib/agents/*`, 21 agents) are plain async functions with a declared `subscribes[]` and
   `periodic` flag. Every run is persisted to `agent_runs` (summary, actions, raw output, LLM provider,
   duration) → full explainability in the **Agent Console**.
 * **Orchestrator** (`tick()`) runs all periodic agents for a tenant, then drains the bus. Triggered by

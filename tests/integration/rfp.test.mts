@@ -30,6 +30,7 @@ const { sourceHash } = await import("../../src/lib/domain/translate");
 const { interpretVoice } = await import("../../src/lib/agents/voice");
 const { callWalkin, joinQueue, leaveQueue, queueState } = await import("../../src/lib/services/queue");
 const { summariseDay } = await import("../../src/lib/domain/dayclose");
+const { sellGiftCard, sellPackage, findUsableGiftCard } = await import("../../src/lib/services/prepaid");
 type Tenant = import("../../src/lib/agents/types").Tenant;
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!, KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -211,6 +212,82 @@ describe("Module 6 + loyalty — POS, split payouts, GST, memberships, wallet, p
     assert.equal(inv!.splits.wallet_used, 200);
     const { data: c } = await db.from("clients").select("wallet_balance").eq("id", ids.priya).single();
     assert.equal(Number(c!.wallet_balance), 0);
+  });
+
+  test("Gift card: no GST at sale, code delivered on WhatsApp, redeemed at checkout after tax (taxable value unchanged)", async () => {
+    const d = addDays(today, 3);
+    const meera = await findOrCreateClient(db, tenant.id, { name: "Meera", phone: "+919811100031", language: "en" });
+    ids.meera = meera.id;
+    const invBefore = (await db.from("invoices").select("id", { count: "exact", head: true }).eq("tenant_id", tenant.id)).count;
+    const g = await sellGiftCard(db, tenant, { amount: 400, buyer_name: "Priya", recipient_name: "Meera", recipient_phone: "+919811100031", message: "Happy birthday", payment_method: "upi" });
+    assert.match(g.code, /^GC-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    await processEvents(db, tenant);
+    assert.equal((await db.from("invoices").select("id", { count: "exact", head: true }).eq("tenant_id", tenant.id)).count, invBefore, "no invoice for a voucher");
+    const { data: sent } = await db.from("messages").select("body, contact_handle, meta").eq("tenant_id", tenant.id).eq("agent", "prepaid").contains("meta", { gift_card_id: g.id });
+    assert.equal(sent!.length, 1); assert.ok(sent![0].body.includes(g.code), "code appended verbatim"); assert.equal(sent![0].contact_handle, "+919811100031");
+    await assert.rejects(findUsableGiftCard(db, tenant.id, "GC-ZZZZ-ZZZZ"), /not found/);
+
+    const r = await createBooking(db, tenant, { client_id: meera.id, service_id: ids.haircut, date: d, time: "11:00", source: "walkin" });
+    await db.from("bookings").update({ status: "completed" }).eq("id", r.booking.id);
+    await emit(db, tenant.id, "booking.completed", { booking_id: r.booking.id, payment_method: "upi", gift_card_code: g.code.toLowerCase().replace(/-/g, " ") }, "test");
+    await processEvents(db, tenant);
+    const { data: inv } = await db.from("invoices").select("*").eq("booking_id", r.booking.id).single();
+    assert.equal(Number(inv!.taxable_value), Number(r.booking.price), "a voucher is a payment, not a discount");
+    const used = Math.min(400, Number(inv!.total));
+    assert.equal(Number(inv!.splits.gift_card_used), used);
+    assert.equal(inv!.splits.gift_card_code, g.code);
+    assert.equal(Number(inv!.splits.collected_now), Math.round((Number(inv!.total) - used) * 100) / 100);
+    const { data: card } = await db.from("gift_cards").select("balance, status").eq("id", g.id).single();
+    assert.equal(Number(card!.balance), Math.round((400 - used) * 100) / 100);
+    assert.equal(card!.status, 400 - used <= 0 ? "redeemed" : "active");
+  });
+
+  test("Prepaid package: GST invoiced at sale; each visit uses one session at ₹0, earliest-expiring first", async () => {
+    const d = addDays(today, 3);
+    const plan = await ins<{ id: string }>("package_plans", { name: "3 haircuts", service_id: ids.haircut, sessions: 3, price: 1200, validity_days: 90 });
+    const sold = await sellPackage(db, tenant, { client_id: ids.meera, plan_id: plan.id, payment_method: "upi" });
+    assert.equal(Number(sold.invoice.inv.taxable_value), 1200);
+    assert.equal(Number(sold.invoice.inv.total), Math.round(1200 * (1 + tenant.settings.gst_rate / 100) * 100) / 100, "GST charged on the package up front");
+    ids.pkg = sold.package_id;
+    const r = await createBooking(db, tenant, { client_id: ids.meera, service_id: ids.haircut, date: d, time: "13:00", source: "walkin" });
+    await db.from("bookings").update({ status: "completed" }).eq("id", r.booking.id);
+    await emit(db, tenant.id, "booking.completed", { booking_id: r.booking.id, payment_method: "cash", use_package: true }, "test");
+    await processEvents(db, tenant);
+    const { data: inv } = await db.from("invoices").select("*").eq("booking_id", r.booking.id).single();
+    assert.equal(Number(inv!.taxable_value), 0, "the service was already paid and taxed");
+    assert.equal(Number(inv!.total), 0);
+    assert.equal(inv!.splits.package_session, "3 haircuts 1/3");
+    const { data: cp } = await db.from("client_packages").select("sessions_left").eq("id", sold.package_id).single();
+    assert.equal(cp!.sessions_left, 2);
+    // opting out bills normally and leaves the package untouched
+    const r2 = await createBooking(db, tenant, { client_id: ids.meera, service_id: ids.haircut, date: d, time: "15:00", source: "walkin" });
+    await db.from("bookings").update({ status: "completed" }).eq("id", r2.booking.id);
+    await emit(db, tenant.id, "booking.completed", { booking_id: r2.booking.id, payment_method: "cash", use_package: false }, "test");
+    await processEvents(db, tenant);
+    const { data: inv2 } = await db.from("invoices").select("taxable_value").eq("booking_id", r2.booking.id).single();
+    assert.equal(Number(inv2!.taxable_value), Number(r2.booking.price));
+    assert.equal((await db.from("client_packages").select("sessions_left").eq("id", sold.package_id).single()).data!.sessions_left, 2);
+  });
+
+  test("Prepaid Value Agent: expiry reminders once per stage, expired cards marked; manage token identifies one booking", async () => {
+    const soonCard = await sellGiftCard(db, tenant, { amount: 300, buyer_name: "Priya", buyer_phone: "+919811100001", validity_days: 10 });
+    const oldCard = await ins<{ id: string }>("gift_cards", { code: "GC-OLDC-ARD2", amount: 100, balance: 100, expires_at: addDays(today, -1) });
+    await db.from("client_packages").update({ expires_at: addDays(today, 2) }).eq("id", ids.pkg);
+    await processEvents(db, tenant); // delivery of the new card
+    const def = agent("prepaid");
+    const out = await runAgent(def, ctx());
+    assert.match(out.summary, /2 expiry reminder/);
+    const { data: msgs } = await db.from("messages").select("body, meta").eq("tenant_id", tenant.id).eq("agent", "prepaid").eq("meta->>kind", "expiry");
+    assert.ok(msgs!.some((m) => m.meta.gift_card_id === soonCard.id && m.meta.stage === "first" && m.body.includes(soonCard.code)));
+    assert.ok(msgs!.some((m) => m.meta.package_id === ids.pkg && m.meta.stage === "last" && /2 session/.test(m.body)));
+    assert.equal((await db.from("gift_cards").select("status").eq("id", oldCard.id).single()).data!.status, "expired");
+    const again = await runAgent(def, ctx());
+    assert.equal(again.skipLog, true, "no duplicate reminders");
+
+    const r = await createBooking(db, tenant, { client_id: ids.meera, service_id: ids.facial, date: addDays(today, 4), time: "12:00", source: "marketplace" });
+    assert.match(String(r.booking.manage_token), /^[0-9a-f-]{36}$/);
+    const { data: byToken } = await db.from("bookings").select("id").eq("manage_token", r.booking.manage_token);
+    assert.deepEqual(byToken!.map((b) => b.id), [r.booking.id]);
   });
 
   test("Referral bonus credited to referrer after friend's first visit", async () => {

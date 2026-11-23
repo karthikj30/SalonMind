@@ -9,12 +9,13 @@ import { loyaltyAgent, reputationAgent, waitlistAgent } from "./growth";
 import { translatorAgent } from "./i18n";
 import { voiceAgent } from "./voice";
 import { briefingAgent, queueAgent } from "./frontdesk";
+import { prepaidAgent } from "./prepaid";
 
 /** The agent mesh. Each agent subscribes to bus events and/or runs on the orchestrator's schedule. */
 export const AGENTS: AgentDef[] = [
   inventoryAgent, negotiatorAgent, wasteAgent,
   conciergeAgent, churnAgent, retentionAgent,
-  loyaltyAgent, reputationAgent,
+  loyaltyAgent, reputationAgent, prepaidAgent,
   noShowAgent, dealsAgent, waitlistAgent, queueAgent,
   recruiterAgent, performanceAgent,
   billingAgent, gstAgent,

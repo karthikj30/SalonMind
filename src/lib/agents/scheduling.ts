@@ -6,6 +6,7 @@ import { llmText, LANGUAGES } from "../ai/llm";
 import { llmTextIn } from "../ai/translate";
 import { sendMessage } from "../services/messaging";
 import { upiLink } from "../domain/upi";
+import { manageLink } from "../services/prepaid";
 import { addDays, festivalOn, fmtDateTime, inr, istDate, timeToMin, todayIst, toIst } from "../time";
 
 /** Module 3 — No-show mitigation: risk score → confirmation nudge and/or partial deposit. */
@@ -46,7 +47,9 @@ export const noShowAgent: AgentDef = {
             messages: [{ role: "user", content: `Client ${client.name}, ${b.services?.name}, ${fmtDateTime(b.start_at)}.` }],
           }, () => fallback);
           provider = m.provider;
-          await sendMessage(db, { tenant_id: tenant.id, client_id: client.id, phone: client.phone, contact_handle: client.phone, channel: "whatsapp", body: m.text, agent: "noshow", meta: { booking_id: b.id, risk: r.risk } });
+          // self-service link appended verbatim (never passed through the model) so customers can move or cancel themselves
+          const link = b.manage_token && manageLink(b.manage_token).startsWith("http") ? `\n${manageLink(b.manage_token)}` : "";
+          await sendMessage(db, { tenant_id: tenant.id, client_id: client.id, phone: client.phone, contact_handle: client.phone, channel: "whatsapp", body: m.text + link, agent: "noshow", meta: { booking_id: b.id, risk: r.risk } });
           actions.push({ type: "nudge", label: `Nudged ${client.name} (risk ${Math.round(r.risk * 100)}%: ${r.factors.join(", ") || "baseline"})${deposit ? ` + deposit ${inr(deposit)}` : ""}`, ref: b.id });
         }
       } else if (ev) {

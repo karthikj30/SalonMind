@@ -7,6 +7,8 @@ marketplace with natural-language and photo search. Built from the RFP in this r
 on free tiers**.
 
 * **Live:** https://salonmind-khaki.vercel.app (owner app at `/signup`, consumer marketplace at `/marketplace`)
+* **Mirror on Render (free tier):** https://salonmind.onrender.com — same database, deployed from `render.yaml`. Free Render
+  services sleep after 15 minutes without traffic, so the first visit after a pause takes about a minute.
 * **Architecture & RFP mapping:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 * **Antigravity master prompt (plan & build):** [`docs/ANTIGRAVITY_PROMPT.md`](docs/ANTIGRAVITY_PROMPT.md) · rules in [`.agent/`](.agent)
 * **Manual test script:** [`docs/TESTING.md`](docs/TESTING.md)
@@ -44,12 +46,12 @@ Concierge (it detects the script, understands "tomorrow 6 o'clock haircut", prop
 customer's own language). The **Unified Inbox** looks and works like WhatsApp (chat list, ticks, wallpaper, take-over,
 open in WhatsApp), and every page is checked at phone width by the E2E test.
 
-## 20 agents
+## 21 agents
 
 | Module | Agents |
 |---|---|
 | Procurement & Inventory | Procurement (predictive refill), Vendor Negotiation, Waste Tracking |
-| CRM & Marketing | AI Concierge (unified inbox), Churn Analytics, Campaign (cycle, recovery, birthday), Loyalty & Referral, Reputation & Rebooking |
+| CRM & Marketing | AI Concierge (unified inbox), Churn Analytics, Campaign (cycle, recovery, birthday), Loyalty & Referral, Reputation & Rebooking, Prepaid Value (gift cards & packages) |
 | Scheduling & Resources | No-Show, Yield Pricing / Deals, Waitlist, Walk-in Queue (+ matrix scheduler with staff leave) |
 | Recruitment & HR | Recruitment, Performance Coach (+ payroll engine) |
 | Billing, POS & GST | Billing & POS, GST Compliance |
@@ -79,6 +81,19 @@ CSV client import, stylist calendar (ICS) feeds and a face-shape style advisor.
 * **Walk-in token queue** — tokens at the desk or by QR self check-in (`/s/<salon>/queue`), live wait estimates from
   the stylists' real calendar, “Call” seats the next customer through the scheduler; a **day-end closing** report on
   Billing; a **daily WhatsApp briefing** for the owner.
+
+**Prepaid value and self-service (latest):**
+
+* **Gift cards** — sell on *Memberships, Gift cards & Loyalty*; the code (e.g. `GC-7KQM-X2PA`) is sent to the
+  recipient on WhatsApp. No GST at sale (a voucher is a payment instrument); at checkout the code pays after tax,
+  before the prepaid wallet, so the taxable value is never reduced. Partial balances carry over.
+* **Prepaid packages** — e.g. “5 haircuts for the price of 4”. GST is invoiced in full when sold; each visit for that
+  service then uses one session at ₹0 (the session that expires first).
+* **Prepaid Value Agent** — delivers gift-card codes the moment they are sold and reminds customers about balances and
+  sessions two weeks and three days before they expire.
+* **Manage my booking** — every confirmation and reminder carries a private link (`/b/<token>`) where the customer can
+  move or cancel the appointment up to 2 hours before, in their language. A cancellation frees the slot straight away
+  for the waitlist and last-minute-deal agents.
 
 Agents communicate through an event bus (`agent_events`) and log every run (`agent_runs`) — watch them
 in the **Agent Console**.

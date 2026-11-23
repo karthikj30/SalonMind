@@ -300,6 +300,76 @@ try {
   f = formWith("Top up prepaid wallet");
   await f.locator("input[name=amount]").fill("1000");
   await submit(f); await expectOk("wallet top-up");
+  // ── gift card (no GST at sale) + prepaid package (GST at sale)
+  f = formWith("Sell gift card");
+  await f.locator("input[name=amount]").fill("500");
+  await f.locator("input[name=recipient_name]").fill("Meera");
+  await f.locator("input[name=recipient_phone]").fill("+919800000077");
+  await f.locator("input[name=message]").fill("Happy birthday!");
+  await submit(f); await expectOk("gift card sold + sent");
+  const giftCode = (await page.locator("td.font-mono", { hasText: /^GC-/ }).first().textContent())?.trim();
+  if (!/^GC-[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(giftCode ?? "")) throw new Error("gift card code not listed: " + giftCode);
+  f = formWith("Create package");
+  await f.locator("input[name=name]").fill("3 haircuts");
+  await f.locator("select[name=service_id]").selectOption({ index: 0 });
+  await f.locator("input[name=price]").fill("1200");
+  await submit(f); await expectOk("package created");
+  await submit(formWith("Sell package")); await expectOk("package sold & invoiced");
+  await shot("loyalty-prepaid");
+  // redeem the gift card at checkout (a day with no other bookings, so the first "Complete & bill" is this one)
+  {
+    const d2 = new Date(Date.now() + 5.5 * 3600e3 + 2 * 86400e3).toISOString().slice(0, 10);
+    await page.goto(`${BASE}/app/bookings?date=${d2}`);
+    f = formWith("2 · Quick booking");
+    await f.locator("select[name=client_id]").selectOption({ label: "Priya Sharma +919800000001" });
+    await f.locator("select[name=service_id]").selectOption({ label: "Balayage" });
+    await f.locator("input[name=time]").fill("12:00");
+    await submit(f); await expectOk("booking to pay by gift card");
+    await page.locator("summary", { hasText: "Complete & bill" }).first().click();
+    const gf = page.locator("form", { has: page.locator("input[name=gift_card_code]") }).first();
+    await gf.locator("input[name=gift_card_code]").fill(giftCode.toLowerCase().replace(/-/g, " "));
+    await submit(gf); await expectOk("checkout with gift card");
+    await page.goto(`${BASE}/app/billing`);
+    await page.locator("table tbody tr a").first().click();
+    await page.waitForURL(/\/app\/billing\/.+/);
+    const invText = (await page.locator("main").textContent()) ?? "";
+    if (!invText.includes(`Gift card ${giftCode}`)) throw new Error("invoice does not show the gift card payment");
+    log("invoice paid by gift card", giftCode);
+    await page.goto(`${BASE}/app/loyalty`);
+    const row = (await page.locator("tr", { has: page.locator("td.font-mono", { hasText: giftCode }) }).textContent())?.replace(/\s+/g, " ");
+    if (!/redeemed/.test(row ?? "")) throw new Error("gift card balance not reduced: " + row);
+    log("gift card after checkout:", row);
+  }
+  // ── customer self-service: book on the public page, then move and cancel through the "manage my booking" link
+  {
+    const d3 = new Date(Date.now() + 5.5 * 3600e3 + 3 * 86400e3).toISOString().slice(0, 10);
+    await page.goto(`${BASE}/app`);
+    const salon = await page.evaluate(() => document.querySelector("a[href^='/s/']")?.getAttribute("href"));
+    await page.goto(`${BASE}${salon}?date=${d3}#book`);
+    await page.locator("#book label").first().click();
+    await page.locator("#book input[name=name]").fill("Self Service");
+    await page.locator("#book input[name=phone]").fill("+919800000088");
+    await Promise.all([page.waitForURL(/[?&]booked=/), page.locator("#book button[type=submit]").click()]);
+    await page.locator("[data-manage-link]").click();
+    await page.waitForURL(/\/b\/[0-9a-f-]{36}/);
+    const manageUrl = page.url().split("?")[0];
+    globalThis.__manageUrl = manageUrl.replace(BASE, "");
+    await page.getByRole("button", { name: "Show free times" }).click();
+    await page.waitForURL(/[?&]date=/);
+    await page.locator("form label").nth(1).click();
+    await Promise.all([page.waitForURL(/done=moved/), page.getByRole("button", { name: "Move to this time" }).click()]);
+    log("manage link → moved:", (await page.locator("[role=status]").textContent())?.slice(0, 90));
+    await page.locator("summary", { hasText: "Cancel appointment" }).click();
+    await Promise.all([page.waitForURL(/done=cancelled/), page.getByRole("button", { name: "Yes, cancel it" }).click()]);
+    if ((await page.locator("[data-status]").getAttribute("data-status")) !== "cancelled") throw new Error("self-service cancel did not cancel the booking");
+    await ctx.addCookies([{ name: "sm_lang", value: "ta", url: BASE }]);
+    await page.goto(manageUrl);
+    const ta = (await page.locator("[data-manage-booking]").textContent()) ?? "";
+    await ctx.addCookies([{ name: "sm_lang", value: "en", url: BASE }]);
+    if (!/[\u0B80-\u0BFF]{3,}/.test(ta)) throw new Error("manage page not shown in Tamil");
+    log("manage link → cancelled; page in Tamil:", ta.replace(/\s+/g, " ").slice(0, 60));
+    await shot("manage-booking");
+  }
   await page.goto(`${BASE}/app/bookings?date=${tomorrow}`);
   f = formWith("Waitlist");
   await f.locator("select[name=service_id]").selectOption({ label: "Balayage" });
@@ -396,7 +466,7 @@ try {
     const slug = await page.evaluate(() => document.querySelector("a[href^='/s/']")?.getAttribute("href")) ?? null;
     if (!slug) throw new Error("public salon page link not found for the mobile audit");
     const routes = ["/app", "/app/bookings", "/app/inbox", "/app/clients", "/app/staff", "/app/services", "/app/inventory", "/app/marketing",
-      "/app/loyalty", "/app/billing", "/app/hr", "/app/agents", "/app/studio", "/app/settings", "/marketplace", ...(slug ? [slug, `${slug}/queue`] : [])];
+      "/app/loyalty", "/app/billing", "/app/hr", "/app/agents", "/app/studio", "/app/settings", "/marketplace", ...(slug ? [slug, `${slug}/queue`] : []), ...(globalThis.__manageUrl ? [globalThis.__manageUrl] : [])];
     const bad = [];
     for (const lang of ["en", "ta", "ur"]) {
       await page.context().addCookies([{ name: "sm_lang", value: lang, url: BASE }]);

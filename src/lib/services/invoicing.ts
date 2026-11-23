@@ -7,23 +7,23 @@ import { todayIst } from "../time";
 /** Issue a GST invoice (shared by POS checkout and membership sales). */
 export async function issueInvoice(db: SupabaseClient, tenant: Tenant, p: {
   booking_id?: string | null; client_id: string | null; lines: TaxLine[]; method: string;
-  renter?: { name: string; booth_rent_pct: number } | null; depositPaid?: number; walletUsed?: number; extra?: Record<string, unknown>;
+  renter?: { name: string; booth_rent_pct: number } | null; depositPaid?: number; walletUsed?: number; giftCardUsed?: number; extra?: Record<string, unknown>;
 }) {
   // Place of supply for in-salon services = salon's state (physical-presence rule) → CGST+SGST
   const pos = tenant.state_code ?? null;
   const inv = computeInvoice(p.lines, tenant.state_code, pos);
   const { count } = await db.from("invoices").select("id", { count: "exact", head: true }).eq("tenant_id", tenant.id);
   const number = invoiceNumber((tenant.slug.replace(/[^a-z0-9]/gi, "").slice(0, 4) || "SM").toUpperCase(), new Date(), (count ?? 0) + 1);
-  const deposit = p.depositPaid ?? 0, wallet = p.walletUsed ?? 0;
-  const viaRail = Math.max(0, Math.round((inv.total - deposit - wallet) * 100) / 100);
-  // gateway fee only applies to money moving over the chosen rail, not the prepaid wallet
+  const deposit = p.depositPaid ?? 0, wallet = p.walletUsed ?? 0, gift = p.giftCardUsed ?? 0;
+  const viaRail = Math.max(0, Math.round((inv.total - deposit - wallet - gift) * 100) / 100);
+  // gateway fee only applies to money moving over the chosen rail, not the prepaid wallet or a gift card
   const s = splitPayout({ ...inv, total: viaRail }, p.method, p.renter ?? null);
-  const splits = { ...s, deposit_adjusted: deposit, wallet_used: wallet, collected_now: viaRail, ...(p.extra ?? {}) };
+  const splits = { ...s, deposit_adjusted: deposit, wallet_used: wallet, gift_card_used: gift, collected_now: viaRail, ...(p.extra ?? {}) };
   const irn = tenant.gstin ? await pseudoIrn(tenant.gstin, number, todayIst()) : null;
   const { data, error } = await db.from("invoices").insert({
     tenant_id: tenant.id, booking_id: p.booking_id ?? null, client_id: p.client_id, number, place_of_supply: pos, items: inv.items,
     taxable_value: inv.taxable_value, cgst: inv.cgst, sgst: inv.sgst, igst: inv.igst, total: inv.total,
-    payment_method: wallet > 0 && viaRail === 0 ? "wallet" : p.method, payment_status: "paid", splits, irn,
+    payment_method: viaRail === 0 && (wallet > 0 || gift > 0) ? (gift >= wallet ? "gift_card" : "wallet") : p.method, payment_status: "paid", splits, irn,
   }).select("id").single();
   if (error) throw new Error(error.message);
   return { id: data.id as string, number, inv, splits };

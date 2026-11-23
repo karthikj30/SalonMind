@@ -30,6 +30,13 @@
 * **Audit log:** migration `0007_audit_log.sql` is applied in production; the integration test proves entries cannot
   be edited or deleted and never contain values.
 
+* **Manage-my-booking link:** `/b/<token>` uses a random UUID per booking (`bookings.manage_token`, 122 bits) as the
+  only credential. The page shows that one booking (service, time, stylist, price) — never phone numbers or other
+  customers — is marked `noindex`, and changes are rate-limited per IP and closed 2 hours before the appointment.
+* **Gift cards:** codes avoid look-alike characters and are unique per salon; redemption uses a conditional update on
+  the balance so two tills cannot spend the same balance twice. Codes, amounts and dates are appended to WhatsApp
+  messages verbatim — the model only writes the greeting.
+
 ## What remains organisational (cannot be "built in")
 
 ISO 27001 certification and a SOC 2 Type II report require an ISMS, risk register, policies, access

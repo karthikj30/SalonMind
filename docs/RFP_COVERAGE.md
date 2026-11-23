@@ -14,7 +14,7 @@ that proves it. Three test layers:
 | Requirement | Implementation | Tests |
 |---|---|---|
 | Multi-tenant SaaS for any Indian salon | `tenants`, `tenant_members`, RLS on every table (`supabase/migrations`) | INT *Tenant isolation…*, INT *Public (anon) can read…*, E2E signup/onboarding |
-| AI-native, autonomous multi-agent network communicating asynchronously | `src/lib/agents/*` (20 agents), event bus `agent_events`, `processEvents`, `tick` | INT *Orchestrator tick…* + every event-chain test below |
+| AI-native, autonomous multi-agent network communicating asynchronously | `src/lib/agents/*` (21 agents), event bus `agent_events`, `processEvents`, `tick` | INT *Orchestrator tick…* + every event-chain test below |
 | Self-optimizing engine | `optimizer` agent tunes `tenants.settings` | INT *Self-optimizer tightens deposit threshold…* |
 | Auto-generated localized micro-frontends | AI Studio `generateLayout` → typed widget schema, any language | INT *Generative micro-frontend…*, E2E AI Studio |
 | Configure workflows from the salon's needs | **Workflow designer**: plain language → validated plan (pause/resume agents, bounded parameters, protected billing); runtime skips paused agents | UNIT *Workflow designer* (2); INT *Workflow designer: plain-language instruction pauses agents…* |
@@ -122,6 +122,10 @@ that proves it. Three test layers:
 | Walk-in token queue with QR self check-in and live wait estimates | `queue` agent, `services/queue.ts`, `domain/queue.ts`, `/s/[slug]/queue` (migration 0009) | UNIT *Walk-in queue…*; INT *Walk-ins get sequential tokens…*; E2E desk token, QR join, call |
 | Day-end closing report (payment modes, cash to count, GST bucket, booth payouts) | `domain/dayclose.ts`, Billing page | UNIT *Day-end closing…*; INT *Day-end closing adds up the real invoices…*; E2E |
 | Daily owner briefing on WhatsApp | `briefing` agent | INT *Daily Briefing Agent messages the owner once a day…* |
+| Gift cards: sold without GST (voucher), code delivered on WhatsApp, redeemed at checkout after tax; balance tracked, expired cards marked | `domain/prepaid.ts`, `services/prepaid.ts`, Billing agent, `prepaid` agent, Loyalty page (migration 0010) | UNIT *Gift cards…*, *Prepaid split…*; INT *Gift card: no GST at sale…*; E2E sell → checkout by code → invoice shows the card |
+| Prepaid service packages (N sessions, GST at sale, ₹0 visits, earliest-expiring first) | `package_plans`, `client_packages` (migration 0010), Billing agent | UNIT *Packages…*; INT *Prepaid package: GST invoiced at sale…*; E2E create + sell |
+| Prepaid Value Agent: expiry reminders for gift-card balances and package sessions (once per stage) | `prepaid` agent | INT *Prepaid Value Agent: expiry reminders…* |
+| Customer self-service “manage my booking” link (move / cancel up to 2 h before; cancellation frees the slot for the waitlist and deals agents), in 13 languages | `/b/[token]`, `bookings.manage_token` (migration 0010), link in confirmations and reminders | UNIT *…self-service window*; INT *…manage token identifies one booking*; E2E book → move → cancel → Tamil |
 | Append-only audit trail live | migration 0007 | INT *Changes to sensitive tables are logged…* |
 | Owner dashboard, sign-in / sign-up and the public queue page in 13 languages (Urdu right-to-left) | `src/lib/i18n/app/*` (hand-made, 442 strings × 12 languages), `UiTranslator`, `/api/i18n/ui` (allowlisted runtime fallback, cached per salon), queue strings in `i18n/ui*.ts` | UNIT *Owner dashboard dictionaries…*, *UI string allowlist is up to date…*; E2E Hindi dashboard, Urdu RTL dashboard at 390px, Tamil queue page |
 | Voice replies in the user's language; on-device Whisper when the browser has no recogniser and no server key | `translateKeeping` (names masked), `VoiceAssistant` (transformers.js + `onnx-community/whisper-base`) | INT *A Hindi voice question is answered in Hindi…*; E2E Hindi voice command; E2E `E2E_STT_WAV=…` real audio → on-device Whisper |
