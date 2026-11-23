@@ -3,10 +3,11 @@ import type { AgentDef, Tenant } from "./types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Staff } from "../domain/types";
 import { payrollLine } from "../domain/payroll";
+import { attendanceSummary, datesBetween, lossOfPay } from "../domain/attendance";
 import { statutory } from "../domain/statutory";
 import { safeDecrypt as decryptField } from "../security/crypto";
 import { llm, llmJson, extractJson } from "../ai/llm";
-import { istDate, timeToMin } from "../time";
+import { istDate, timeToMin, todayIst, toIst } from "../time";
 
 export const LEARNING_MODULES = [
   "Advanced balayage & colour melting", "Precision men's fades", "Client consultation & upselling", "Product dosage & waste control",
@@ -102,22 +103,43 @@ export async function screeningTurn(db: SupabaseClient, tenant: Tenant, candidat
 export async function computePayroll(db: SupabaseClient, tenantId: string, from: string, to: string) {
   const { data: t } = await db.from("tenants").select("state_code").eq("id", tenantId).single();
   const month = Number(to.slice(5, 7));
-  const [{ data: staff }, { data: bookings }, { data: invoices }, { data: adj }] = await Promise.all([
+  const [{ data: staff }, { data: bookings }, { data: invoices }, { data: adj }, { data: att }, { data: leave }] = await Promise.all([
     db.from("staff").select("*").eq("tenant_id", tenantId),
     db.from("bookings").select("staff_id, price").eq("tenant_id", tenantId).eq("status", "completed").gte("start_at", istDate(from, "00:00").toISOString()).lte("start_at", istDate(to, "23:59").toISOString()),
     db.from("invoices").select("items").eq("tenant_id", tenantId).gte("invoice_date", from).lte("invoice_date", to),
     db.from("staff_adjustments").select("*").eq("tenant_id", tenantId).gte("created_at", istDate(from, "00:00").toISOString()).lte("created_at", istDate(to, "23:59").toISOString()),
+    db.from("staff_attendance").select("staff_id, work_date, clock_in, clock_out").eq("tenant_id", tenantId).gte("work_date", from).lte("work_date", to),
+    db.from("staff_time_off").select("staff_id, start_at, end_at").eq("tenant_id", tenantId).lte("start_at", istDate(to, "23:59").toISOString()).gte("end_at", istDate(from, "00:00").toISOString()),
   ]);
+  // Attendance-based loss of pay is opt-in per stylist: it counts from that stylist's first-ever clock-in, so
+  // salons (or stylists) that never record attendance are never docked, and nobody is docked for days before.
+  const today = todayIst();
+  const trackedSince = new Map<string, string>();
+  await Promise.all(((staff ?? []) as Staff[]).map(async (st) => {
+    const { data: first } = await db.from("staff_attendance").select("work_date").eq("tenant_id", tenantId).eq("staff_id", st.id).lte("work_date", to).order("work_date").limit(1).maybeSingle();
+    if (first) trackedSince.set(st.id, first.work_date as string);
+  }));
   const lines = ((staff ?? []) as Staff[]).map((st) => {
     const svcRev = (bookings ?? []).filter((b) => b.staff_id === st.id).reduce((s, b) => s + Number(b.price), 0);
     const prodRev = (invoices ?? []).flatMap((i) => i.items as { kind: string; staff_id?: string; taxable_value: number }[]).filter((i) => i.kind === "product" && i.staff_id === st.id).reduce((s, i) => s + Number(i.taxable_value), 0);
     const sum = (k: string) => (adj ?? []).filter((a) => a.staff_id === st.id && a.kind === k).reduce((s, a) => s + Number(a.amount), 0);
-    const line = payrollLine(st, svcRev, prodRev, sum("tip"), sum("penalty"), sum("bonus"));
-    if (line.type !== "employee") return { ...line, statutory: null, employer_cost: line.net };
+    let line = payrollLine(st, svcRev, prodRev, sum("tip"), sum("penalty"), sum("bonus"));
+    let attendance: ReturnType<typeof attendanceSummary> & { lop: number } | null = null;
+    const since = trackedSince.get(st.id);
+    if (since && line.type === "employee") {
+      const leaveDates = (leave ?? []).filter((l) => l.staff_id === st.id).flatMap((l) => datesBetween(toIst(new Date(l.start_at)).date, toIst(new Date(l.end_at)).date));
+      const a = attendanceSummary({ rows: (att ?? []).filter((r) => r.staff_id === st.id), from: since > from ? since : from, to, today, workStart: String(st.work_start).slice(0, 5), leaveDates });
+      const lop = lossOfPay(st.base_salary, a.absent, to.slice(0, 7));
+      attendance = { ...a, lop };
+      // loss of pay reduces the fixed salary (and therefore the PF/ESI wage base) — never below zero
+      const base = Math.max(0, line.base - lop);
+      line = { ...line, base, net: line.net - (line.base - base) };
+    }
+    if (line.type !== "employee") return { ...line, attendance, statutory: null, employer_cost: line.net };
     // PF / ESI / professional tax (india-payroll rules) on monthly gross wages; tips are pass-through, not wages
     const gross = line.base + line.service_commission + line.product_commission + line.bonus;
     const stat = statutory({ basic: line.base, gross, stateCode: t?.state_code, month, gender: st.gender, pf: st.pf_enabled !== false, esi: st.esi_enabled !== false });
-    return { ...line, gross, statutory: stat, net: line.net - stat.employee_deductions, employer_cost: gross + stat.employer_contributions };
+    return { ...line, attendance, gross, statutory: stat, net: line.net - stat.employee_deductions, employer_cost: gross + stat.employer_contributions };
   });
   return { lines, total: lines.reduce((s, l) => s + l.net, 0), employer_cost: lines.reduce((s, l) => s + l.employer_cost, 0) };
 }

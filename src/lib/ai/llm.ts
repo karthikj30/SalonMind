@@ -13,7 +13,7 @@ import { ChatAnthropic } from "@langchain/anthropic";
  * `BaseChatModel`, so the chain is provider-agnostic and providers can be swapped by env var.
  *
  * Order (first healthy model wins; the rest are fallbacks):
- *   free   1. Groq           — Llama 3.3 70B / Llama 4 Scout (vision)      GROQ_API_KEY
+ *   free   1. Groq           — gpt-oss-120b, then Qwen3 (text; Whisper for STT) GROQ_API_KEY
  *   free   2. Google Gemini  — Gemini 2.5 Flash (vision)                   GEMINI_API_KEY
  *   free   3. OpenRouter     — ":free" models (OpenAI-compatible)          OPENROUTER_API_KEY
  *   free   4. Hugging Face   — Inference Providers router                  HF_TOKEN
@@ -58,15 +58,27 @@ const oaCompat = (name: string, baseURL: string, keyEnv: string | null, modelEnv
   }),
 });
 
-export const PROVIDERS: Provider[] = [
-  {
-    name: "groq", tier: "free", vision: true, enabled: () => !!process.env.GROQ_API_KEY,
-    label: (img) => (img ? process.env.GROQ_VISION_MODEL || "meta-llama/llama-4-scout-17b-16e-instruct" : process.env.GROQ_MODEL || "llama-3.3-70b-versatile"),
-    model: ({ temperature, maxTokens, image }) => new ChatGroq({
-      model: image ? process.env.GROQ_VISION_MODEL || "meta-llama/llama-4-scout-17b-16e-instruct" : process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
-      apiKey: process.env.GROQ_API_KEY, temperature, maxTokens, maxRetries: 0,
-    }),
+const isReasoning = (m: string) => /gpt-oss|deepseek-r1|qwq/i.test(m);
+const groqProvider = (name: string, textModel: () => string): Provider => ({
+  name, tier: "free", vision: !!process.env.GROQ_VISION_MODEL, enabled: () => !!process.env.GROQ_API_KEY,
+  label: (img) => (img ? process.env.GROQ_VISION_MODEL! : textModel()),
+  model: ({ temperature, maxTokens, image }) => {
+    const model = image ? process.env.GROQ_VISION_MODEL! : textModel();
+    const reasoning = isReasoning(model);
+    return new ChatGroq({
+      model, apiKey: process.env.GROQ_API_KEY, temperature, maxRetries: 0,
+      maxTokens: reasoning ? maxTokens + 600 : maxTokens,
+      ...(reasoning ? { reasoningEffort: "low" as const } : {}),
+    });
   },
+});
+
+export const PROVIDERS: Provider[] = [
+  // Groq (free). Defaults follow the models Groq serves today; override with GROQ_MODEL / GROQ_FALLBACK_MODEL /
+  // GROQ_VISION_MODEL. gpt-oss models reason before answering, so they get low effort + extra token headroom
+  // (otherwise a short reply can run out of tokens while still "thinking" and come back empty).
+  groqProvider("groq", () => process.env.GROQ_MODEL || "openai/gpt-oss-120b"),
+  groqProvider("groq", () => process.env.GROQ_FALLBACK_MODEL || "qwen/qwen3.8-27b"),
   {
     name: "gemini", tier: "free", vision: true, enabled: () => !!process.env.GEMINI_API_KEY,
     label: () => process.env.GEMINI_MODEL || "gemini-2.5-flash",

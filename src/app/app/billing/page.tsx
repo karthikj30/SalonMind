@@ -1,7 +1,9 @@
 import { getTenantContext } from "@/lib/tenant";
-import { Badge, Card, Field, Flash, Input, PageHeader, Table, Td } from "@/components/ui";
+import { Badge, Card, Field, Flash, Input, PageHeader, Select, Table, Td } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
-import { prepareGst } from "../actions";
+import { addExpense, deleteExpense, prepareGst } from "../actions";
+import { monthlyPnl } from "@/lib/services/backoffice";
+import { Receipt, TrendingUp } from "lucide-react";
 import { addDays, fmtDate, inr, istDate, todayIst } from "@/lib/time";
 import { summariseDay, type CloseInvoice } from "@/lib/domain/dayclose";
 import { stateName } from "@/lib/states";
@@ -21,6 +23,11 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
   const [{ data: dayInv }, { data: dayTips }] = await Promise.all([
     db.from("invoices").select("total, taxable_value, cgst, sgst, igst, payment_method, items, splits").eq("tenant_id", tenant.id).eq("invoice_date", closeDate),
     db.from("staff_adjustments").select("amount").eq("tenant_id", tenant.id).eq("kind", "tip").gte("created_at", istDate(closeDate, "00:00").toISOString()).lt("created_at", istDate(addDays(closeDate, 1), "00:00").toISOString()),
+  ]);
+  const pnlMonth = /^\d{4}-\d{2}$/.test(sp.pnl ?? "") ? sp.pnl : todayIst().slice(0, 7);
+  const [pnl, { data: expenses }] = await Promise.all([
+    monthlyPnl(db, tenant, pnlMonth),
+    db.from("expenses").select("*").eq("tenant_id", tenant.id).gte("spent_on", `${pnlMonth}-01`).lte("spent_on", `${pnlMonth}-31`).order("spent_on", { ascending: false }),
   ]);
   const dc = summariseDay((dayInv ?? []) as CloseInvoice[], (dayTips ?? []).map((t) => Number(t.amount)));
   const g = ret?.gstr3b as R3b | undefined;
@@ -73,6 +80,46 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
               </div>
             </div>
           ) : <p className="text-sm text-brand-900/45">No invoices on {fmtDate(closeDate)}. Pick another date, or complete a booking to issue one.</p>}
+        </Card>
+        <Card title={`Profit & loss · ${pnlMonth}`} icon={<TrendingUp className="h-4 w-4" />} className="lg:col-span-2" actions={
+          <form className="flex items-center gap-1"><Input name="pnl" type="month" defaultValue={pnlMonth} aria-label="Month" className="!py-1 text-xs" /><button className="rounded-lg border border-brand-200 px-2 py-1 text-xs hover:bg-brand-50">Show</button></form>
+        }>
+          <div className="grid gap-4 sm:grid-cols-2" data-pnl>
+            <table className="w-full text-sm">
+              <tbody>
+                {([["Revenue (excl. GST)", pnl.revenue, ""], ["  of which services", pnl.serviceRevenue, "sub"], ["  of which retail", pnl.productSales, "sub"], ["Product cost (retail + back-bar)", -pnl.productCost, ""], ["Gross profit", pnl.grossProfit, "b"], ["Staff cost (payroll + PF/ESI)", -pnl.payroll, ""], ["Expenses", -pnl.expenses, ""]] as const).map(([l, v, k]) => (
+                  <tr key={l} className={k === "b" ? "border-t font-semibold" : ""}><td className={`py-1 ${k === "sub" ? "ps-4 text-xs text-brand-900/55" : ""}`}>{l.trim()}</td><td className={`text-right ${k === "sub" ? "text-xs text-brand-900/55" : ""}`}>{inr(v)}</td></tr>
+                ))}
+                <tr className="border-t-2 border-brand-200 text-base font-bold"><td className="py-1.5">Net profit</td><td className={`text-right ${pnl.net < 0 ? "text-red-700" : "text-emerald-700"}`}>{inr(pnl.net)}</td></tr>
+              </tbody>
+            </table>
+            <div className="text-sm">
+              <p className="text-xs uppercase tracking-wide text-brand-900/50">Margin</p>
+              <p className={`font-display text-3xl font-semibold ${pnl.net < 0 ? "text-red-700" : "text-brand-900"}`}>{pnl.margin}%</p>
+              <p className="mt-3 text-xs uppercase tracking-wide text-brand-900/50">Where the money went</p>
+              <ul className="mt-1 space-y-1 text-xs">{pnl.expensesByCategory.length ? pnl.expensesByCategory.map((e) => <li key={e.category} className="flex justify-between"><span className="capitalize">{e.category}</span><span>{inr(e.amount)}</span></li>) : <li className="text-brand-900/45">No expenses recorded for this month.</li>}</ul>
+              <p className="mt-3 text-[11px] text-brand-900/45">{fmtDate(pnl.from)} → {fmtDate(pnl.to)}. GST collected is owed to the government, so it is not counted as income.</p>
+            </div>
+          </div>
+        </Card>
+        <Card title="Expenses" icon={<Receipt className="h-4 w-4" />}>
+          <form action={addExpense} className="grid grid-cols-2 gap-2">
+            <Field label="Date"><Input name="spent_on" type="date" defaultValue={todayIst()} max={todayIst()} /></Field>
+            <Field label="Category"><Select name="category" defaultValue="supplies">{["rent", "utilities", "supplies", "marketing", "maintenance", "salaries", "software", "other"].map((c) => <option key={c} value={c}>{c}</option>)}</Select></Field>
+            <Field label="Amount ₹"><Input name="amount" type="number" min={1} step="0.01" required /></Field>
+            <Field label="GST paid ₹"><Input name="gst_paid" type="number" min={0} step="0.01" defaultValue={0} /></Field>
+            <Field label="Paid via"><Select name="paid_via" defaultValue="upi"><option value="upi">UPI</option><option value="cash">Cash</option><option value="card">Card</option><option value="netbanking">NetBanking</option></Select></Field>
+            <Field label="Note"><Input name="note" placeholder="Electricity bill" /></Field>
+            <div className="col-span-2"><SubmitButton>Add expense</SubmitButton></div>
+          </form>
+          <ul className="mt-3 space-y-1 text-xs" data-expenses>
+            {(expenses ?? []).slice(0, 12).map((e) => (
+              <li key={e.id} className="flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate">{fmtDate(e.spent_on)} · <span className="capitalize">{e.category}</span>{e.note ? ` · ${e.note}` : ""}</span>
+                <span className="flex shrink-0 items-center gap-2">{inr(e.amount)}<form action={deleteExpense}><input type="hidden" name="id" value={e.id} /><button className="text-red-600 hover:underline" aria-label="Delete expense">×</button></form></span>
+              </li>
+            ))}
+          </ul>
         </Card>
         <Card title="GST returns (draft)">
           <form action={prepareGst} className="mb-3 flex items-end gap-2">

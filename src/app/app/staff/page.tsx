@@ -1,11 +1,12 @@
 import { getTenantContext } from "@/lib/tenant";
 import { Badge, Card, Field, Flash, Input, PageHeader, Select, Table, Td, Textarea } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
-import { addAdjustment, addStaff, addTimeOff, deleteTimeOff, runPayroll, toggleStaff } from "../actions";
+import { addAdjustment, addStaff, addTimeOff, clockAction, deleteTimeOff, runPayroll, toggleStaff } from "../actions";
+import { Clock } from "lucide-react";
 import { addDays, fmtDate, fmtDateTime, inr, todayIst } from "@/lib/time";
 
 type Stat = { pf_employee: number; esi_employee: number; pt: number; employer_contributions: number } | null;
-type Line = { statutory?: Stat; employer_cost?: number; gross?: number; name: string; type: string; service_revenue: number; product_revenue: number; base: number; service_commission: number; product_commission: number; tips: number; penalties: number; bonus: number; booth_payout: number; net: number; breakdown: { range: string; amount: number }[] };
+type Line = { attendance?: { present: number; workingDays: number; absent: number; late: number; lop: number } | null; statutory?: Stat; employer_cost?: number; gross?: number; name: string; type: string; service_revenue: number; product_revenue: number; base: number; service_commission: number; product_commission: number; tips: number; penalties: number; bonus: number; booth_payout: number; net: number; breakdown: { range: string; amount: number }[] };
 
 export default async function StaffPage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const sp = await searchParams;
@@ -18,6 +19,8 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
     db.from("staff_time_off").select("*, staff(name)").eq("tenant_id", tenant.id).gte("end_at", new Date().toISOString()).order("start_at"),
   ]);
   const today = todayIst();
+  const { data: att } = await db.from("staff_attendance").select("staff_id, work_date, clock_in, clock_out").eq("tenant_id", tenant.id).gte("work_date", today.slice(0, 8) + "01").lte("work_date", today);
+  const istTime = (iso: string) => new Date(iso).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" });
   const latest = runs?.[0];
   return (
     <>
@@ -57,6 +60,25 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
             <div className="col-span-2"><SubmitButton>Add</SubmitButton></div>
           </form>
         </Card>
+        <Card title={`Attendance · ${fmtDate(today)}`} icon={<Clock className="h-4 w-4" />} className="lg:col-span-3">
+          <Table head={["Staff", "Shift", "Clock in", "Clock out", "Days present this month", ""]} empty="Add staff to track attendance.">
+            {(staff ?? []).filter((s) => s.active).map((st) => {
+              const mine = (att ?? []).filter((a) => a.staff_id === st.id);
+              const t0 = mine.find((a) => a.work_date === today);
+              return (
+                <tr key={st.id} data-attendance={st.name}>
+                  <Td className="font-medium">{st.name}</Td><Td className="text-xs">{String(st.work_start).slice(0, 5)}–{String(st.work_end).slice(0, 5)}</Td>
+                  <Td>{t0 ? istTime(t0.clock_in) : "—"}</Td><Td>{t0?.clock_out ? istTime(t0.clock_out) : "—"}</Td><Td>{mine.length}</Td>
+                  <Td>{!t0?.clock_out && (
+                    <form action={clockAction}><input type="hidden" name="staff_id" value={st.id} /><input type="hidden" name="dir" value={t0 ? "out" : "in"} />
+                      <SubmitButton variant={t0 ? "ghost" : "primary"} className="!px-3 !py-1 text-xs">{t0 ? "Clock out" : "Clock in"}</SubmitButton></form>
+                  )}</Td>
+                </tr>
+              );
+            })}
+          </Table>
+          <p className="mt-2 text-[11px] text-brand-900/50">From a stylist's first clock-in, payroll deducts loss of pay for unexplained absences (salary ÷ days in month × days absent). Approved leave is never deducted; arrivals more than 15 minutes after the shift start count as late.</p>
+        </Card>
         <Card title="Run payroll" className="lg:col-span-2">
           <form action={runPayroll} className="mb-4 flex flex-wrap items-end gap-2">
             <Field label="From"><Input name="from" type="date" defaultValue={today.slice(0, 8) + "01"} /></Field>
@@ -70,7 +92,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
                 {(latest.lines as Line[]).map((l, i) => (
                   <tr key={i}>
                     <Td className="font-medium">{l.name}<div className="text-[11px] font-normal text-brand-900/55">{l.breakdown.map((b) => `${b.range}: ₹${b.amount}`).join(" · ")}</div></Td>
-                    <Td>{inr(l.service_revenue)}</Td><Td>{inr(l.product_revenue)}</Td><Td>{inr(l.base)}</Td>
+                    <Td>{inr(l.service_revenue)}</Td><Td>{inr(l.product_revenue)}</Td><Td>{inr(l.base)}{l.attendance && <div className="text-[11px] text-brand-900/55" data-lop>{l.attendance.present}/{l.attendance.workingDays} days{l.attendance.lop > 0 ? ` · LOP −${inr(l.attendance.lop)}` : ""}{l.attendance.late ? ` · ${l.attendance.late} late` : ""}</div>}</Td>
                     <Td>{l.type === "booth_renter" ? inr(l.booth_payout) : inr(l.service_commission)}</Td><Td>{inr(l.product_commission)}</Td>
                     <Td>{inr(l.tips)}</Td><Td>{inr(l.penalties)}</Td>
                     <Td className="text-xs">{l.statutory ? `${inr(l.statutory.pf_employee)} / ${inr(l.statutory.esi_employee)} / ${inr(l.statutory.pt)}` : "—"}</Td>

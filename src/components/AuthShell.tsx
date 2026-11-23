@@ -5,6 +5,7 @@ import { SalonArt } from "./SalonArt";
 import { ThemeToggle } from "./ThemeToggle";
 import { VoiceAssistant } from "./VoiceAssistant";
 import { UiTranslator } from "./UiTranslator";
+import { GetAppChooser } from "./GetAppChooser";
 import { LanguagePicker } from "./LanguagePicker";
 import { getDict } from "@/lib/i18n/server";
 import { isRtl } from "@/lib/i18n/ui";
@@ -41,6 +42,7 @@ export async function AuthShell({ title, subtitle, children }: { title: string; 
         </div>
       </section>
       <VoiceAssistant defaultLang={lang} />
+      <GetAppChooser />
     </main>
   );
 }

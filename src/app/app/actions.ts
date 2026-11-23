@@ -6,6 +6,7 @@ import { AGENTS } from "@/lib/agents/registry";
 import { createBooking, findOrCreateClient, logPastVisit, rescheduleBooking } from "@/lib/services/booking";
 import { issueInvoice } from "@/lib/services/invoicing";
 import { sellGiftCard, sellPackage } from "@/lib/services/prepaid";
+import { clockIn, clockOut } from "@/lib/services/backoffice";
 import { importClients } from "@/lib/services/clientsImport";
 import { encryptField } from "@/lib/security/crypto";
 import { receiveMessage } from "@/lib/agents/crm";
@@ -114,6 +115,9 @@ export async function eraseClient(fd: FormData) {
   // DPDP Act right to erasure: anonymise PII, keep financial records (statutory retention) de-identified
   await db.from("messages").delete().eq("client_id", id);
   await db.from("campaigns").delete().eq("client_id", id);
+  // consultation records (colour formulas, allergy tests) are personal/health data — deleted outright
+  await db.from("client_formulas").delete().eq("client_id", id).eq("tenant_id", tenant.id);
+  await db.from("patch_tests").delete().eq("client_id", id).eq("tenant_id", tenant.id);
   await db.from("clients").update({ name: "Erased client", phone: null, email: null, notes: null, consent_marketing: false }).eq("id", id).eq("tenant_id", tenant.id);
   done("/app/clients", "Client personal data erased (DPDP). Invoices retained in de-identified form.");
 }
@@ -552,6 +556,61 @@ export async function sellPackageAction(fd: FormData) {
     fail("/app/loyalty", (e as Error).message);
   }
   done("/app/loyalty", msg);
+}
+
+// ───────────── Attendance, consultation cards, expenses ─────────────
+export async function clockAction(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  const staffId = s(fd, "staff_id"), dir = s(fd, "dir");
+  try {
+    if (dir === "out") await clockOut(db, tenant.id, staffId); else await clockIn(db, tenant.id, staffId, "desk");
+  } catch (e) { fail("/app/staff", (e as Error).message); }
+  done("/app/staff", dir === "out" ? "Clocked out." : "Clocked in — attendance feeds this month's payroll.");
+}
+
+export async function addFormula(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  const clientId = s(fd, "client_id"), back = `/app/clients/${clientId}`;
+  const { error } = await db.from("client_formulas").insert({
+    tenant_id: tenant.id, client_id: clientId, service_id: s(fd, "service_id") || null, staff_id: s(fd, "staff_id") || null,
+    formula: s(fd, "formula"), developer: s(fd, "developer") || null, processing_min: n(fd, "processing_min") || null, notes: s(fd, "notes") || null,
+  });
+  if (error) fail(back, error.message);
+  done(back, "Colour formula saved to the client's card.");
+}
+
+export async function addPatchTest(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  const clientId = s(fd, "client_id"), back = `/app/clients/${clientId}`;
+  const { error } = await db.from("patch_tests").insert({
+    tenant_id: tenant.id, client_id: clientId, product: s(fd, "product"), tested_on: s(fd, "tested_on") || todayIst(),
+    result: ["pass", "fail", "pending"].includes(s(fd, "result")) ? s(fd, "result") : "pending", staff_id: s(fd, "staff_id") || null, notes: s(fd, "notes") || null,
+  });
+  if (error) fail(back, error.message);
+  done(back, "Patch test recorded.");
+}
+
+export async function setPatchResult(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  const clientId = s(fd, "client_id");
+  await db.from("patch_tests").update({ result: s(fd, "result") === "fail" ? "fail" : "pass" }).eq("id", s(fd, "id")).eq("tenant_id", tenant.id);
+  done(`/app/clients/${clientId}`, "Patch test result updated.");
+}
+
+export async function addExpense(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  const { error } = await db.from("expenses").insert({
+    tenant_id: tenant.id, spent_on: s(fd, "spent_on") || todayIst(), category: s(fd, "category") || "other", amount: n(fd, "amount"),
+    gst_paid: n(fd, "gst_paid"), paid_via: s(fd, "paid_via") || "upi", note: s(fd, "note") || null,
+  });
+  if (error) fail("/app/billing", error.message.includes("amount") ? "Enter an amount above ₹0" : error.message);
+  done("/app/billing", "Expense recorded — the profit & loss updates instantly.");
+}
+
+export async function deleteExpense(fd: FormData) {
+  const { db, tenant } = await getTenantContext();
+  await db.from("expenses").delete().eq("id", s(fd, "id")).eq("tenant_id", tenant.id);
+  done("/app/billing", "Expense removed.");
 }
 
 // ───────────── Ported from open source: CSV import (pronto), human handoff (Kontor) ─────────────

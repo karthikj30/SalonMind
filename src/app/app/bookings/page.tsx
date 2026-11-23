@@ -7,6 +7,7 @@ import { waitLabel } from "@/lib/domain/queue";
 import { planBooking } from "@/lib/services/booking";
 import { addDays, fmtDateTime, inr, istDate, todayIst, toIst } from "@/lib/time";
 import { upiLink } from "@/lib/domain/upi";
+import { needsPatchTest, patchTestStatus, type PatchTest } from "@/lib/domain/consultation";
 import { DayCalendar, CategoryLegend } from "@/components/DayCalendar";
 import { CalendarDays, ListChecks, Wand2, Hourglass, Ticket, Zap } from "lucide-react";
 
@@ -25,6 +26,11 @@ export default async function Bookings({ searchParams }: { searchParams: Promise
   ]);
   const { data: timeOff } = await db.from("staff_time_off").select("staff_id, start_at, end_at, reason").eq("tenant_id", tenant.id)
     .lte("start_at", istDate(date, "23:59").toISOString()).gte("end_at", istDate(date, "00:00").toISOString());
+  // allergy-alert (patch) test status for colour services on this day
+  const colourClients = [...new Set((bookings ?? []).filter((b) => b.client_id && needsPatchTest(b.services ?? {})).map((b) => b.client_id as string))];
+  const { data: ptests } = colourClients.length ? await db.from("patch_tests").select("client_id, tested_on, result").eq("tenant_id", tenant.id).in("client_id", colourClients) : { data: [] };
+  const patchOf = (b: { client_id: string | null; start_at: string; services?: { name?: string; category?: string } | null }) =>
+    b.client_id && needsPatchTest(b.services ?? {}) ? patchTestStatus(((ptests ?? []) as (PatchTest & { client_id: string })[]).filter((p) => p.client_id === b.client_id), new Date(b.start_at)).status : null;
   const queue = await queueState(db, tenant).catch(() => null); // null until migration 0009 is applied
   let plan: Awaited<ReturnType<typeof planBooking>> | null = null;
   let planError: string | null = null;
@@ -55,7 +61,10 @@ export default async function Bookings({ searchParams }: { searchParams: Promise
               <tr key={b.id} id={`b-${b.id}`} className="scroll-mt-24 target:bg-gold-50">
                 <Td className="whitespace-nowrap font-medium text-brand-900">{toIst(new Date(b.start_at)).time}–{toIst(new Date(b.end_at)).time}</Td>
                 <Td><div className="font-medium">{b.clients?.name ?? "—"}</div><div className="text-xs text-brand-900/40">{b.source}</div></Td>
-                <Td>{b.services?.name}</Td>
+                <Td>{b.services?.name}{(() => { const ps = patchOf(b); return ps && (
+                  <a href={`/app/clients/${b.client_id}`} data-patch={ps} className={`mt-0.5 block text-[11px] ${ps === "ok" ? "text-emerald-700" : ps === "failed" ? "font-semibold text-red-700" : "text-amber-700"}`}>
+                    {ps === "ok" ? "Patch test ✔" : ps === "failed" ? "⚠ Patch test reacted" : ps === "too_soon" ? "Patch test pending" : "Patch test needed"}
+                  </a>); })()}</Td>
                 <Td><div>{b.staff?.name ?? "—"}</div><div className="text-xs text-brand-900/55">{b.rooms?.name}</div>{b.schedule_reasoning && <div className="max-w-xs text-[11px] text-brand-900/40" title={b.schedule_reasoning}>{b.schedule_reasoning.slice(0, 80)}…</div>}</Td>
                 <Td><div>{inr(b.price)}</div>{b.pricing_note && <div className="text-[11px] text-brand-900/55">{b.pricing_note}</div>}</Td>
                 <Td>{b.no_show_risk === null ? "…" : <Badge tone={b.no_show_risk >= tenant.settings.deposit_threshold ? "red" : b.no_show_risk >= tenant.settings.nudge_threshold ? "amber" : "green"}>{Math.round(b.no_show_risk * 100)}%</Badge>}

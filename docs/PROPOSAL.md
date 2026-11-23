@@ -16,7 +16,7 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) (multi-agent mesh, event bus, tenant is
 Instead of case studies, the working system is the evidence. It is live, and every RFP bullet has a test that
 runs against the real database ([`RFP_COVERAGE.md`](RFP_COVERAGE.md)):
 
-* 21 agents (prepaid value, translator, voice, walk-in queue and daily briefing added to: procurement, negotiation, waste, concierge, churn, campaigns, loyalty, reputation,
+* 22 agents (consultation & safety, prepaid value, translator, voice, walk-in queue and daily briefing added to: procurement, negotiation, waste, concierge, churn, campaigns, loyalty, reputation,
   no-show, yield pricing, waitlist, recruitment, performance, billing, GST, self-optimizer) on an event bus.
 * LangChain.js LLM layer (Gemini / OpenAI GPT / Anthropic Claude / free Groq, OpenRouter, Hugging Face,
   Ollama) with a deterministic, multilingual rules engine as the final fallback.

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { GetAppChooser } from "@/components/GetAppChooser";
 import { ArrowRight, Bot, CalendarClock, MessagesSquare, Package, Receipt, Search, Sparkles, UserRoundSearch, Workflow, Languages, IndianRupee, ShieldCheck } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { SalonArt } from "@/components/SalonArt";
@@ -94,6 +95,7 @@ export default function Home() {
         <span className="flex items-center gap-2"><Logo className="h-6 w-6" />SalonMind · built for Indian salons</span>
         <span>Runs on free tiers: Vercel · Supabase · Groq / Gemini / OpenRouter free models</span>
       </footer>
+      <GetAppChooser />
     </main>
   );
 }

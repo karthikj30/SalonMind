@@ -519,3 +519,43 @@ test("App versions: apps/version.json is the single source the Android build, de
   const links = JSON.parse(readFileSync("public/.well-known/assetlinks.json", "utf8"));
   assert.equal(links[0].target.package_name, v.android.applicationId);
 });
+
+import { needsPatchTest, patchTestStatus, latestTestDate } from "../src/lib/domain/consultation.ts";
+import { attendanceSummary, lossOfPay } from "../src/lib/domain/attendance.ts";
+import { profitAndLoss } from "../src/lib/domain/pnl.ts";
+
+test("Patch tests: colour services need a passed test ≥48 h before and <12 months old", () => {
+  assert.equal(needsPatchTest({ name: "Balayage", category: "colour" }), true);
+  assert.equal(needsPatchTest({ name: "Global hair colour", category: "hair" }), true);
+  assert.equal(needsPatchTest({ name: "Men's haircut", category: "grooming" }), false);
+  const start = new Date("2026-11-26T11:00:00+05:30");
+  assert.equal(patchTestStatus([], start).status, "missing");
+  assert.equal(patchTestStatus([{ tested_on: "2026-11-20", result: "pass" }], start).status, "ok");
+  assert.equal(patchTestStatus([{ tested_on: "2026-11-25", result: "pass" }], start).status, "too_soon");
+  assert.equal(patchTestStatus([{ tested_on: "2026-11-20", result: "pending" }], start).status, "too_soon");
+  assert.equal(patchTestStatus([{ tested_on: "2025-10-01", result: "pass" }], start).status, "expired");
+  assert.equal(patchTestStatus([{ tested_on: "2026-06-01", result: "pass" }, { tested_on: "2026-11-01", result: "fail" }], start).status, "failed", "the latest result wins");
+  assert.equal(latestTestDate(start), "2026-11-24");
+});
+
+test("Attendance: working days skip weekly off and leave; loss of pay only for absent days; late marks", () => {
+  const rows = [
+    { staff_id: "s", work_date: "2026-11-02", clock_in: "2026-11-02T10:05:00+05:30", clock_out: "2026-11-02T19:05:00+05:30" },
+    { staff_id: "s", work_date: "2026-11-03", clock_in: "2026-11-03T10:40:00+05:30", clock_out: null },
+    { staff_id: "s", work_date: "2026-11-04", clock_in: "2026-11-04T09:55:00+05:30", clock_out: "2026-11-04T18:55:00+05:30" },
+  ];
+  // 1–7 Nov 2026: Sunday 1st is the weekly off, 5th is approved leave → working days 2,3,4,6,7
+  const s = attendanceSummary({ rows, from: "2026-11-01", to: "2026-11-30", today: "2026-11-07", workStart: "10:00", weeklyOff: [0], leaveDates: ["2026-11-05"] });
+  assert.deepEqual({ w: s.workingDays, p: s.present, a: s.absent, late: s.late, h: s.hours }, { w: 5, p: 3, a: 2, late: 1, h: 18 });
+  assert.equal(lossOfPay(30000, 2, "2026-11"), 2000);
+  assert.equal(lossOfPay(31000, 0, "2026-12"), 0);
+});
+
+test("Profit & loss: revenue is net of GST, minus stock at cost, payroll and expenses", () => {
+  const p = profitAndLoss({
+    invoices: [{ taxable_value: 10000, items: [{ kind: "service", taxable_value: 9000 }, { kind: "product", taxable_value: 1000 }] }, { taxable_value: 5000 }],
+    productCost: 1200, payroll: 6000, expenses: [{ category: "rent", amount: 4000 }, { category: "utilities", amount: 800 }, { category: "rent", amount: 1000 }],
+  });
+  assert.deepEqual({ r: p.revenue, ps: p.productSales, g: p.grossProfit, e: p.expenses, n: p.net, m: p.margin }, { r: 15000, ps: 1000, g: 13800, e: 5800, n: 2000, m: 13.3 });
+  assert.deepEqual(p.expensesByCategory[0], { category: "rent", amount: 5000 });
+});

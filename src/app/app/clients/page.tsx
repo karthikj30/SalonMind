@@ -25,7 +25,7 @@ export default async function Clients({ searchParams }: { searchParams: Promise<
               const mine = (counts ?? []).filter((b) => b.client_id === c.id);
               return (
                 <tr key={c.id}>
-                  <Td className="font-medium">{c.name}</Td><Td>{c.phone ?? "—"}</Td><Td>{c.language}</Td>
+                  <Td className="font-medium"><a href={`/app/clients/${c.id}`} className="hover:text-brand-600 hover:underline" data-client-card>{c.name}</a></Td><Td>{c.phone ?? "—"}</Td><Td>{c.language}</Td>
                   <Td>{mine.filter((b) => b.status === "completed").length}{mine.some((b) => b.status === "no_show") && <span className="text-xs text-red-600"> ({mine.filter((b) => b.status === "no_show").length} NS)</span>}</Td>
                   <Td>{c.avg_cycle_days ? `${c.avg_cycle_days}d` : "—"}</Td><Td>{fmtDate(c.last_visit_at)}</Td>
                   <Td>{c.churn_risk === null ? "—" : <Badge tone={c.churn_risk >= 0.6 ? "red" : c.churn_risk >= 0.35 ? "amber" : "green"}>{Math.round(c.churn_risk * 100)}%</Badge>}</Td>
@@ -33,6 +33,7 @@ export default async function Clients({ searchParams }: { searchParams: Promise<
                   <Td>{c.consent_marketing ? "✔" : "✘"}</Td>
                   <Td>
                     <div className="flex gap-2 text-xs">
+                      <a className="text-brand-600 hover:underline" href={`/app/clients/${c.id}`}>Card</a>
                       <a className="text-brand-600 hover:underline" href={`/api/clients/${c.id}/export`}>Export</a>
                       <form action={eraseClient}><input type="hidden" name="id" value={c.id} /><button className="text-red-600 hover:underline">Erase</button></form>
                     </div>

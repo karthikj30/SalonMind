@@ -103,3 +103,19 @@ https://dev.to/build996/free-whisper-api-groq-deepgram-assemblyai-compared-562m
 * https://dingg.app/blogs/how-to-increase-salon-revenue-with-membership-plans-in-2026
 * https://www.zenoti.com/thecheckin/best-salon-management-software-2026
 * https://github.com/clawnify/OpenSalon · https://github.com/AbdullahBakir97/Barber-Salon
+
+## Sweep 4 — what the leading salon platforms and Indian owners ask for next (Nov 2026)
+
+| Finding | Evidence | Built |
+|---|---|---|
+| Gift cards and prepaid packages are standard in Fresha, Zenoti, Booksy and the Indian apps (DINGG, Zylu); owners want prepaid money to turn into visits | [Zenoti booking guide](https://zenoti.com/thecheckin/salon-booking-software-guide), [Mangomint](https://www.mangomint.com/blog/salon-software-features), [DINGG](https://dingg.app/blogs/top-10-challenges-indian-salon-owners-face-today) | Gift cards (no GST at sale), packages (GST at sale), **Prepaid Value Agent** (migration 0010) |
+| Customers expect to move or cancel online without calling | [Booksy](https://biz.booksy.com/blog/how-to-find-the-best-salon-software-for-small-businesses-features-to-consider), [DaySmart](https://www.daysmart.com/salon/?p=2209) | `/b/<token>` manage-my-booking link in 13 languages |
+| Colour formula cards and allergy-alert (patch) test records are standard in Zenoti, Phorest and SalonIQ; tests ≥48 h before colour and repeated every 12 months | [SalonIQ patch tests](https://www.saloniq.com/salon-management-features/), [SalonIQ skin tests](https://www.saloniq.com/managing-skin-tests-using-salon-iq/), [Booksy consultation forms](https://biz.booksy.com/en-gb/blog/hair-salon-client-consultation-forms), [Zenoti UK](https://www.zenoti.com/thecheckin/hair-salon-software-uk) | Client consultation card, **Consultation & Safety Agent** (migration 0011) |
+| Indian owners still run attendance and commission on paper; payroll should count days present, with biometric/selfie attendance in paid apps | [SalaryBox 2026 guide](https://salarybox.in/blog/payroll-attendance-management-for-salons-spas-beauty-businesses-in-india-complete-guide-2026/), [Petpooja payroll](https://blog.petpooja.com/industry-business-guides/payroll-software-salons-spas-india/), [MioSalon staff](https://www.miosalon.com/features/staff-management) | Clock-in/out → loss of pay in payroll (opt-in per stylist, leave never deducted) |
+| Owners want expenses and real profit, not only sales (Vyapar, Salos, Ustaad bundle expense tracking) | [Vyapar salon billing](https://vyaparapp.in/free/billing-software-for-retail-shop/salon), [Salos](https://www.itechguides.com/products/salos/) | Expense book + monthly profit & loss (revenue net of GST, stock at cost, payroll, expenses) |
+| Open-source salon systems (SalonCRM, OpenSalon, SalonERP) cover booking, POS and inventory — already in SalonMind; none has agents, GST or Indian languages | [SalonCRM](https://awesome.ecosyste.ms/projects/github.com%2Flebtoki%2Fsaloncrm), [OpenSalon](https://github.com/clawnify/open-salon), [SalonERP](https://salonerp.sourceforge.io/) | — (confirms the USP: agents + GST + 13 languages + WhatsApp) |
+| Customers love before/after photos and add-on upsells (Booksy, StyleSeat) | [GetApp before/after](https://www.getapp.com/retail-consumer-services-software/salon/f/before-after-pictures/), [Booksy features](https://biz.booksy.com/features) | Next: photo uploads need storage quotas — recommended, not built |
+
+**USP after this sweep:** the only free salon platform where autonomous agents (now 22) run the desk end to end —
+WhatsApp booking in 13 languages, GST e-invoices, UPI deposits, prepaid value, safety checks before colour, attendance-
+aware payroll and a real profit & loss — with Android and desktop apps that update themselves.

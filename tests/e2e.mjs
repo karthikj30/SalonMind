@@ -3,7 +3,7 @@
 // Creates a throw-away account + salon and deletes both at the end via Settings → Delete (set KEEP_TEST_DATA=1 to keep them).
 import { createRequire } from "node:module";
 // works with a local devDependency or a globally installed Playwright (NODE_PATH)
-const { chromium } = createRequire(import.meta.url)("playwright");
+const { chromium, devices } = createRequire(import.meta.url)("playwright");
 
 const BASE = process.env.BASE_URL || "http://localhost:3000";
 const ts = Date.now().toString(36);
@@ -15,6 +15,8 @@ const log = (...a) => console.log("✔", ...a);
 const sttWav = process.env.E2E_STT_WAV;
 const browser = await chromium.launch(sttWav ? { args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", `--use-file-for-fake-audio-capture=${sttWav}`] } : {});
 const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+// the first-visit "get the app" chooser is tested on its own below; the main run behaves like a returning visitor
+await ctx.addInitScript(() => { try { localStorage.setItem("sm_app_choice", "web"); } catch {} });
 const page = await ctx.newPage();
 page.setDefaultTimeout(90_000);
 const shot = async (name) => shots && page.screenshot({ path: `${shots}/${name}.png`, fullPage: true });
@@ -370,6 +372,35 @@ try {
     log("manage link → cancelled; page in Tamil:", ta.replace(/\s+/g, " ").slice(0, 60));
     await shot("manage-booking");
   }
+  // ── back office: clock-in, consultation card (patch test + colour formula), expenses → profit & loss
+  {
+    await page.goto(`${BASE}/app/staff`);
+    const row = page.locator("tr[data-attendance]").first();
+    await submit(row.locator("form")); await expectOk("staff clocked in");
+    if (!/Clock out/.test((await page.locator("tr[data-attendance]").first().textContent()) ?? "")) throw new Error("clock-in not shown");
+    await page.goto(`${BASE}/app/clients`);
+    await page.locator("[data-client-card]", { hasText: "Priya Sharma" }).first().click();
+    await page.waitForURL(/\/app\/clients\/[0-9a-f-]{36}/);
+    f = formWith("Record a patch test");
+    await f.locator("input[name=product]").fill("Majirel 7.1");
+    await submit(f); await expectOk("patch test recorded (pending)");
+    await submit(page.locator("form", { has: page.locator("input[name=result][value=pass]") }).first()); await expectOk("patch test: no reaction");
+    f = formWith("Save a formula");
+    await f.locator("input[name=formula]").fill("7.1 30g + 8.13 15g");
+    await f.locator("input[name=developer]").fill("6% / 20 vol");
+    await f.locator("input[name=processing_min]").fill("35");
+    await submit(f); await expectOk("colour formula saved");
+    log("consultation card patch status:", await page.locator("[data-patch-status]").getAttribute("data-patch-status"));
+    await page.goto(`${BASE}/app/billing`);
+    f = page.locator("form", { has: page.locator("select[name=category]") }).first();
+    await f.locator("select[name=category]").selectOption("rent");
+    await f.locator("input[name=amount]").fill("5000");
+    await f.locator("input[name=note]").fill("November rent");
+    await submit(f); await expectOk("expense recorded");
+    const pnl = (await page.locator("[data-pnl]").textContent())?.replace(/\s+/g, " ") ?? "";
+    if (!/Net profit/.test(pnl) || !/rent/i.test(pnl)) throw new Error("P&L missing: " + pnl.slice(0, 200));
+    log("profit & loss:", pnl.slice(0, 140));
+  }
   await page.goto(`${BASE}/app/bookings?date=${tomorrow}`);
   f = formWith("Waitlist");
   await f.locator("select[name=service_id]").selectOption({ label: "Balayage" });
@@ -441,6 +472,29 @@ try {
   await page.keyboard.press("Enter");
   await page.waitForURL(/\/app\/billing/);
   log("Ctrl+K → Billing");
+
+  // ── first visit: choose Android app / desktop app / web — ordered for the visitor's device, remembered
+  for (const [label, opts, first] of [["Android phone", { ...devices["Pixel 7"] }, "android"], ["desktop", { viewport: { width: 1280, height: 800 } }, "desktop"]]) {
+    const c = await browser.newContext(opts);
+    const p = await c.newPage();
+    await p.goto(`${BASE}/`);
+    const sheet = p.locator("[data-get-app]");
+    await sheet.waitFor({ timeout: 10_000 });
+    const order = await sheet.locator("[data-choice]").evaluateAll((els) => els.map((e) => e.getAttribute("data-choice")));
+    if (order[0] !== first || !order.includes("web")) throw new Error(`${label}: unexpected chooser order ${order}`);
+    if (first === "android" && (await sheet.locator("[data-choice=android]").getAttribute("href")) !== "/downloads/SalonMind.apk") throw new Error("APK link missing");
+    await sheet.locator("[data-choice=web]").click();
+    await p.reload();
+    await p.waitForTimeout(1200);
+    if (await p.locator("[data-get-app]").count()) throw new Error(`${label}: chooser shown again after "continue on the web"`);
+    await p.goto(`${BASE}/open?shell=android&v=1`).catch(() => {}); // inside the app the chooser never appears
+    await c.clearCookies(); await p.evaluate(() => localStorage.clear());
+    await p.context().addCookies([{ name: "sm_shell", value: "android:1", url: BASE }]);
+    await p.goto(`${BASE}/login`); await p.waitForTimeout(1200);
+    if (await p.locator("[data-get-app]").count()) throw new Error(`${label}: chooser must not show inside the app`);
+    log(`get-the-app chooser (${label}): ${order.join(" → ")}; remembered; hidden inside the app`);
+    await c.close();
+  }
 
   // ── apps: download page, APK served with the Android type, asset links for the TWA, update banner for an old shell
   {

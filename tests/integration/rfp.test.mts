@@ -31,6 +31,7 @@ const { interpretVoice } = await import("../../src/lib/agents/voice");
 const { callWalkin, joinQueue, leaveQueue, queueState } = await import("../../src/lib/services/queue");
 const { summariseDay } = await import("../../src/lib/domain/dayclose");
 const { sellGiftCard, sellPackage, findUsableGiftCard } = await import("../../src/lib/services/prepaid");
+const { clockIn, clockOut, monthlyPnl } = await import("../../src/lib/services/backoffice");
 type Tenant = import("../../src/lib/agents/types").Tenant;
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!, KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -288,6 +289,74 @@ describe("Module 6 + loyalty — POS, split payouts, GST, memberships, wallet, p
     assert.match(String(r.booking.manage_token), /^[0-9a-f-]{36}$/);
     const { data: byToken } = await db.from("bookings").select("id").eq("manage_token", r.booking.manage_token);
     assert.deepEqual(byToken!.map((b) => b.id), [r.booking.id]);
+  });
+
+  test("Consultation & Safety Agent: colour booking without a patch test → client asked to test 48 h before; reacted test → owner warned", async () => {
+    await db.from("tenants").update({ phone: "+919811100099" }).eq("id", tenant.id); await refresh();
+    const kavya = await findOrCreateClient(db, tenant.id, { name: "Kavya", phone: "+919811100041", language: "en" });
+    const d = addDays(today, 5);
+    const r = await createBooking(db, tenant, { client_id: kavya.id, service_id: ids.balayage, date: d, time: "11:00", source: "walkin" });
+    await processEvents(db, tenant);
+    const { data: ask } = await db.from("messages").select("body, meta").eq("tenant_id", tenant.id).eq("agent", "consultation").contains("meta", { booking_id: r.booking.id });
+    assert.equal(ask!.length, 1); assert.equal(ask![0].meta.kind, "patch_test_request");
+    assert.equal(ask![0].meta.by, addDays(d, -2), "test due 48 h before the appointment");
+    // the test reacted → the salon is warned, the client is not asked again
+    await ins("patch_tests", { client_id: kavya.id, product: "Majirel 7.1", tested_on: today, result: "fail" });
+    const r2 = await createBooking(db, tenant, { client_id: kavya.id, service_id: ids.balayage, date: d, time: "15:00", source: "walkin" });
+    await processEvents(db, tenant);
+    const { data: warn } = await db.from("messages").select("body, contact_handle, meta").eq("tenant_id", tenant.id).eq("agent", "consultation").contains("meta", { booking_id: r2.booking.id });
+    assert.equal(warn!.length, 1); assert.equal(warn![0].meta.kind, "patch_test_failed"); assert.equal(warn![0].contact_handle, "+919811100099");
+    // a passed test 3 days before → nothing to do; a haircut never needs one
+    const ok = await findOrCreateClient(db, tenant.id, { name: "Tara", phone: "+919811100042" });
+    await ins("patch_tests", { client_id: ok.id, product: "Majirel 7.1", tested_on: addDays(today, -3), result: "pass" });
+    const r3 = await createBooking(db, tenant, { client_id: ok.id, service_id: ids.balayage, date: addDays(today, 6), time: "11:00", source: "walkin" });
+    const r4 = await createBooking(db, tenant, { client_id: ok.id, service_id: ids.haircut, date: addDays(today, 6), time: "16:00", source: "walkin" });
+    await processEvents(db, tenant);
+    const { count } = await db.from("messages").select("id", { count: "exact", head: true }).eq("tenant_id", tenant.id).eq("agent", "consultation").in("meta->>booking_id", [r3.booking.id, r4.booking.id]);
+    assert.equal(count, 0);
+    // DPDP: erasing a client removes their consultation records
+    await db.from("patch_tests").delete().eq("client_id", kavya.id);
+    assert.equal((await db.from("patch_tests").select("id", { count: "exact", head: true }).eq("client_id", kavya.id)).count, 0);
+  });
+
+  test("Attendance feeds payroll: loss of pay for absent days, approved leave not deducted; one clock-in per day", async () => {
+    const st = await ins<{ id: string }>("staff", { name: "Pooja", skill_level: 2, skills: ["skin"], base_salary: 30000, hourly_cost: 150 });
+    await clockIn(db, tenant.id, st.id);
+    await assert.rejects(clockIn(db, tenant.id, st.id), /Already clocked in/);
+    await clockOut(db, tenant.id, st.id);
+    await assert.rejects(clockOut(db, tenant.id, st.id), /Not clocked in/);
+    // previous month: present on 20 days, 2 days approved leave, the rest absent
+    const pm = addDays(`${today.slice(0, 8)}01`, -1).slice(0, 7);
+    const days = new Date(Date.UTC(Number(pm.slice(0, 4)), Number(pm.slice(5, 7)), 0)).getUTCDate();
+    const from = `${pm}-01`, to = `${pm}-${String(days).padStart(2, "0")}`;
+    const rows = Array.from({ length: 20 }, (_, i) => { const dd = `${pm}-${String(i + 1).padStart(2, "0")}`; return { tenant_id: tenant.id, staff_id: st.id, work_date: dd, clock_in: istDate(dd, "10:00").toISOString(), clock_out: istDate(dd, "19:00").toISOString() }; });
+    assert.ifError((await db.from("staff_attendance").insert(rows)).error);
+    await ins("staff_time_off", { staff_id: st.id, start_at: istDate(`${pm}-21`, "00:00").toISOString(), end_at: istDate(`${pm}-22`, "23:59").toISOString(), reason: "leave" });
+    const p = await computePayroll(db, tenant.id, from, to);
+    const line = p.lines.find((l) => l.staff_id === st.id)! as { base: number; attendance: { present: number; absent: number; lop: number; leave: number } };
+    const absent = days - 20 - 2;
+    assert.equal(line.attendance.present, 20);
+    assert.equal(line.attendance.absent, absent);
+    assert.equal(line.attendance.lop, Math.round((30000 / days) * absent));
+    assert.equal(line.base, 30000 - line.attendance.lop);
+    // a stylist who never clocks in is never docked
+    const neha = p.lines.find((l) => l.staff_id === ids.neha)! as { attendance: unknown; base: number };
+    assert.equal(neha.attendance, null); assert.equal(neha.base, 12000);
+    await db.from("staff").update({ active: false }).eq("id", st.id); // keep the team the other suites expect
+  });
+
+  test("Profit & loss: revenue net of GST, stock at cost, payroll and expenses add up", async () => {
+    const month = today.slice(0, 7);
+    const before = await monthlyPnl(db, tenant, month);
+    await ins("expenses", { spent_on: today, category: "rent", amount: 15000, gst_paid: 0 });
+    await ins("expenses", { spent_on: today, category: "utilities", amount: 2400 });
+    const p = await monthlyPnl(db, tenant, month);
+    const { data: inv } = await db.from("invoices").select("taxable_value").eq("tenant_id", tenant.id).gte("invoice_date", `${month}-01`).lte("invoice_date", today);
+    assert.equal(p.revenue, Math.round(inv!.reduce((s, i) => s + Number(i.taxable_value), 0) * 100) / 100);
+    assert.equal(p.expenses - before.expenses, 17400);
+    assert.equal(p.net, Math.round((p.revenue - p.productCost - p.payroll - p.expenses) * 100) / 100);
+    assert.ok(p.productCost > 0, "retail serum + back-bar lightener are costed");
+    assert.equal(p.expensesByCategory[0].category, "rent");
   });
 
   test("Referral bonus credited to referrer after friend's first visit", async () => {
@@ -675,7 +744,7 @@ describe("Front desk — walk-in token queue, day-end closing, daily owner brief
     } else {
       assert.match(r.message, /free|closed|rest of today/, "outside working hours nobody can be seated");
       assert.ok(nowMin < 10 * 60 || nowMin > 20 * 60 - 60, `seating was refused during working hours: ${r.message}`);
-      assert.equal((await db.from("bookings").select("id").eq("tenant_id", tenant.id).eq("source", "walkin")).data!.length, 0, "no booking in the past");
+      assert.equal((await db.from("bookings").select("id, clients!inner(phone)").eq("tenant_id", tenant.id).eq("clients.phone", "+919811100091").eq("source", "walkin")).data!.length, 0, "no booking in the past");
       q = await queueState(db, tenant);
       assert.equal(q.waiting.length, 2);
     }
