@@ -227,10 +227,12 @@ try {
   // customer answers from the thread composer ("send as customer" test button)
   await page.locator("section[aria-label=Conversation] textarea[name=body]").fill("yes");
   await page.getByRole("button", { name: "Send as customer (test)" }).click();
-  await page.waitForFunction(() => /Confirmed/.test([...document.querySelectorAll(".wa-out [data-body]")].pop()?.textContent ?? ""), null, { timeout: 120_000 }).catch(() => {});
+  // with an AI key the confirmation comes in the customer's language (Hinglish → Hindi); it always starts with ✅
+  await page.waitForFunction(() => /✅|Confirmed/.test([...document.querySelectorAll(".wa-out [data-body]")].pop()?.textContent ?? ""), null, { timeout: 120_000 }).catch(() => {});
   await expectOk("customer confirms → booked");
   const confirmed = await page.locator(".wa-out [data-body]").last().textContent();
-  if (!/Confirmed/.test(confirmed ?? "")) throw new Error("expected a booking confirmation, got: " + confirmed);
+  if (!/✅|Confirmed/.test(confirmed ?? "")) throw new Error("expected a booking confirmation, got: " + confirmed);
+  if (!/\/b\/[0-9a-f-]{36}/.test(confirmed ?? "")) throw new Error("confirmation should carry the manage-my-booking link: " + confirmed);
   log("concierge confirmation:", confirmed?.slice(0, 120));
   await shot("inbox");
 
