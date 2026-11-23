@@ -27,6 +27,7 @@ export default function Home() {
             <Link href="/" className="flex items-center gap-2.5"><Logo className="h-9 w-9" /><span className="font-display text-xl font-semibold">SalonMind</span></Link>
             <div className="flex items-center gap-1 text-sm">
               <Link href="/marketplace" className="hidden rounded-xl px-3 py-2 text-onplum hover:bg-white/10 sm:inline">Find a salon</Link>
+              <Link href="/download" className="hidden rounded-xl px-3 py-2 text-onplum hover:bg-white/10 md:inline">Get the app</Link>
               <ThemeToggle className="hidden px-3 py-2 text-onplum sm:inline-flex" />
               <Link href="/login" className="rounded-xl px-3 py-2 text-onplum hover:bg-white/10">Log in</Link>
               <Link href="/signup" className="rounded-xl bg-champ-400 px-4 py-2 font-medium text-ink hover:bg-champ-300">List your salon</Link>

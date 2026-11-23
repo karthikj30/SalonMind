@@ -125,5 +125,12 @@ const mr: Record<string, string> = {
   "Package": "पॅकेज",
   "Sold packages": "विकलेली पॅकेज",
   "Issue & send": "जारी करा आणि पाठवा",
+  "Get the app": "ॲप मिळवा",
+  "Get the SalonMind app": "SalonMind ॲप मिळवा",
+  "Download for Android": "Android साठी डाउनलोड करा",
+  "Update app": "ॲप अपडेट करा",
+  "How updates work": "अपडेट कसे होतात",
+  "Desktop installers": "डेस्कटॉप इंस्टॉलर",
+  "Install in one click": "एका क्लिकमध्ये इंस्टॉल करा",
 };
 export default mr;

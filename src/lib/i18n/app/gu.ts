@@ -125,5 +125,12 @@ const gu: Record<string, string> = {
   "Package": "પૅકેજ",
   "Sold packages": "વેચાયેલા પૅકેજ",
   "Issue & send": "જારી કરો અને મોકલો",
+  "Get the app": "ઍપ મેળવો",
+  "Get the SalonMind app": "SalonMind ઍપ મેળવો",
+  "Download for Android": "Android માટે ડાઉનલોડ કરો",
+  "Update app": "ઍપ અપડેટ કરો",
+  "How updates work": "અપડેટ કેવી રીતે થાય છે",
+  "Desktop installers": "ડેસ્કટોપ ઇન્સ્ટોલર",
+  "Install in one click": "એક ક્લિકમાં ઇન્સ્ટોલ કરો",
 };
 export default gu;

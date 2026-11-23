@@ -37,6 +37,10 @@
   the balance so two tills cannot spend the same balance twice. Codes, amounts and dates are appended to WhatsApp
   messages verbatim — the model only writes the greeting.
 
+* **Apps:** the Android signing key is never committed (`*.jks`, `keystore.properties` are git-ignored); CI reads it
+  from repository secrets. The desktop app runs the site with context isolation and the sandbox on, exposes no Node
+  APIs to pages, grants the microphone only to the SalonMind origin and opens every other link in the system browser.
+
 ## What remains organisational (cannot be "built in")
 
 ISO 27001 certification and a SOC 2 Type II report require an ISMS, risk register, policies, access

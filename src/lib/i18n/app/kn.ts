@@ -125,5 +125,12 @@ const kn: Record<string, string> = {
   "Package": "ಪ್ಯಾಕೇಜ್",
   "Sold packages": "ಮಾರಾಟವಾದ ಪ್ಯಾಕೇಜ್‌ಗಳು",
   "Issue & send": "ನೀಡಿ ಮತ್ತು ಕಳುಹಿಸಿ",
+  "Get the app": "ಆ್ಯಪ್ ಪಡೆಯಿರಿ",
+  "Get the SalonMind app": "SalonMind ಆ್ಯಪ್ ಪಡೆಯಿರಿ",
+  "Download for Android": "Android ಗಾಗಿ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ",
+  "Update app": "ಆ್ಯಪ್ ಅಪ್‌ಡೇಟ್ ಮಾಡಿ",
+  "How updates work": "ಅಪ್‌ಡೇಟ್‌ಗಳು ಹೇಗೆ ಆಗುತ್ತವೆ",
+  "Desktop installers": "ಡೆಸ್ಕ್‌ಟಾಪ್ ಇನ್‌ಸ್ಟಾಲರ್‌ಗಳು",
+  "Install in one click": "ಒಂದೇ ಕ್ಲಿಕ್‌ನಲ್ಲಿ ಇನ್‌ಸ್ಟಾಲ್ ಮಾಡಿ",
 };
 export default kn;

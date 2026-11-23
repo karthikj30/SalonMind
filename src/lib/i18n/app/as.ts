@@ -125,5 +125,12 @@ const asm: Record<string, string> = {
   "Package": "পেকেজ",
   "Sold packages": "বিক্ৰী হোৱা পেকেজ",
   "Issue & send": "জাৰি কৰি পঠিয়াওক",
+  "Get the app": "এপ লওক",
+  "Get the SalonMind app": "SalonMind এপ লওক",
+  "Download for Android": "Android-ৰ বাবে ডাউনলোড কৰক",
+  "Update app": "এপ আপডেট কৰক",
+  "How updates work": "আপডেট কেনেকৈ হয়",
+  "Desktop installers": "ডেস্কটপ ইনষ্টলাৰ",
+  "Install in one click": "এক ক্লিকতে ইনষ্টল কৰক",
 };
 export default asm;

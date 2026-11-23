@@ -125,5 +125,12 @@ const ml: Record<string, string> = {
   "Package": "പാക്കേജ്",
   "Sold packages": "വിറ്റ പാക്കേജുകൾ",
   "Issue & send": "നൽകി അയയ്ക്കുക",
+  "Get the app": "ആപ്പ് നേടുക",
+  "Get the SalonMind app": "SalonMind ആപ്പ് നേടുക",
+  "Download for Android": "Android-നായി ഡൗൺലോഡ് ചെയ്യുക",
+  "Update app": "ആപ്പ് അപ്ഡേറ്റ് ചെയ്യുക",
+  "How updates work": "അപ്ഡേറ്റുകൾ എങ്ങനെ",
+  "Desktop installers": "ഡെസ്ക്ടോപ്പ് ഇൻസ്റ്റാളറുകൾ",
+  "Install in one click": "ഒറ്റ ക്ലിക്കിൽ ഇൻസ്റ്റാൾ ചെയ്യുക",
 };
 export default ml;

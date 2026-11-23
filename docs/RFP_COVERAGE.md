@@ -130,6 +130,7 @@ that proves it. Three test layers:
 | Owner dashboard, sign-in / sign-up and the public queue page in 13 languages (Urdu right-to-left) | `src/lib/i18n/app/*` (hand-made, 442 strings × 12 languages), `UiTranslator`, `/api/i18n/ui` (allowlisted runtime fallback, cached per salon), queue strings in `i18n/ui*.ts` | UNIT *Owner dashboard dictionaries…*, *UI string allowlist is up to date…*; E2E Hindi dashboard, Urdu RTL dashboard at 390px, Tamil queue page |
 | Voice replies in the user's language; on-device Whisper when the browser has no recogniser and no server key | `translateKeeping` (names masked), `VoiceAssistant` (transformers.js + `onnx-community/whisper-base`) | INT *A Hindi voice question is answered in Hindi…*; E2E Hindi voice command; E2E `E2E_STT_WAV=…` real audio → on-device Whisper |
 | Phone UX: bottom tab bar, voice button, proper `tel` keyboards | `Sidebar.tsx` | E2E mobile audit (17 pages at 390px) |
+| Android app (TWA) and Windows/Mac/Linux desktop app (Electron) that load the live site — updates arrive without reinstalling; in-place shell updates via `/open` + `/api/app-version` | `apps/android`, `apps/desktop`, `apps/version.json`, `/download`, `AppUpdateBanner`, `.github/workflows/apps.yml` | UNIT *App shells…*, *App versions…*; E2E download page, APK type, asset links, update banner; desktop app launched under Xvfb |
 
 ## Proposal (RFP §5)
 

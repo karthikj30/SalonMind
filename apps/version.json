@@ -1,0 +1,5 @@
+{
+  "url": "https://salonmind-khaki.vercel.app",
+  "android": { "applicationId": "app.salonmind.android", "versionCode": 1, "versionName": "1.0.0" },
+  "desktop": { "version": "1.0.0" }
+}

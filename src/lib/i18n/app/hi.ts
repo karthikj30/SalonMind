@@ -136,5 +136,12 @@ const hi: Record<string, string> = {
   "Package": "पैकेज",
   "Sold packages": "बेचे गए पैकेज",
   "Issue & send": "जारी करें और भेजें",
+  "Get the app": "ऐप पाएँ",
+  "Get the SalonMind app": "SalonMind ऐप पाएँ",
+  "Download for Android": "Android के लिए डाउनलोड करें",
+  "Update app": "ऐप अपडेट करें",
+  "How updates work": "अपडेट कैसे होते हैं",
+  "Desktop installers": "डेस्कटॉप इंस्टॉलर",
+  "Install in one click": "एक क्लिक में इंस्टॉल करें",
 };
 export default hi;

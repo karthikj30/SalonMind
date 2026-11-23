@@ -1,0 +1,76 @@
+{
+  "name": "salonmind-desktop",
+  "productName": "SalonMind",
+  "version": "1.0.0",
+  "description": "SalonMind for Windows, Mac and Linux \u2014 opens your live salon dashboard.",
+  "author": "SalonMind",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "sync-version": "node -e \"require('fs').copyFileSync('../version.json','version.json')\"",
+    "start": "npm run sync-version && electron .",
+    "dist": "npm run sync-version && electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.10.2",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "app.salonmind.desktop",
+    "productName": "SalonMind",
+    "artifactName": "SalonMind-${version}-${os}-${arch}.${ext}",
+    "files": [
+      "main.js",
+      "preload.js",
+      "offline.html",
+      "version.json",
+      "build/icon.png",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "main.js"
+    },
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "shortcutName": "SalonMind"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "category": "public.app-category.business"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office",
+      "maintainer": "SalonMind"
+    },
+    "publish": null
+  },
+  "repository": "github:karthikj30/SalonMind"
+}

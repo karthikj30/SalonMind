@@ -125,5 +125,12 @@ const or: Record<string, string> = {
   "Package": "ପ୍ୟାକେଜ୍",
   "Sold packages": "ବିକ୍ରି ହୋଇଥିବା ପ୍ୟାକେଜ୍",
   "Issue & send": "ଜାରି କରି ପଠାନ୍ତୁ",
+  "Get the app": "ଆପ୍ ପାଆନ୍ତୁ",
+  "Get the SalonMind app": "SalonMind ଆପ୍ ପାଆନ୍ତୁ",
+  "Download for Android": "Android ପାଇଁ ଡାଉନଲୋଡ୍ କରନ୍ତୁ",
+  "Update app": "ଆପ୍ ଅପଡେଟ୍ କରନ୍ତୁ",
+  "How updates work": "ଅପଡେଟ୍ କିପରି ହୁଏ",
+  "Desktop installers": "ଡେସ୍କଟପ୍ ଇନଷ୍ଟଲର୍",
+  "Install in one click": "ଗୋଟିଏ କ୍ଲିକରେ ଇନଷ୍ଟଲ୍ କରନ୍ତୁ",
 };
 export default or;

@@ -125,5 +125,12 @@ const ta: Record<string, string> = {
   "Package": "பேக்கேஜ்",
   "Sold packages": "விற்ற பேக்கேஜ்கள்",
   "Issue & send": "வழங்கி அனுப்பு",
+  "Get the app": "ஆப்பைப் பெறுங்கள்",
+  "Get the SalonMind app": "SalonMind ஆப்பைப் பெறுங்கள்",
+  "Download for Android": "Android-க்கு பதிவிறக்கு",
+  "Update app": "ஆப்பைப் புதுப்பி",
+  "How updates work": "புதுப்பிப்புகள் எப்படி வேலை செய்கின்றன",
+  "Desktop installers": "டெஸ்க்டாப் நிறுவிகள்",
+  "Install in one click": "ஒரே கிளிக்கில் நிறுவு",
 };
 export default ta;

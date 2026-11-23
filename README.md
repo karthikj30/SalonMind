@@ -7,6 +7,8 @@ marketplace with natural-language and photo search. Built from the RFP in this r
 on free tiers**.
 
 * **Live:** https://salonmind-khaki.vercel.app (owner app at `/signup`, consumer marketplace at `/marketplace`)
+* **Apps:** Android APK and Windows / Mac / Linux desktop apps — website → **Get the app** (`/download`); details in
+  [`docs/APPS.md`](docs/APPS.md). They load the live site, so every update arrives automatically without reinstalling.
 * **Mirror on Render (free tier):** https://salonmind.onrender.com — same database, deployed from `render.yaml`. Free Render
   services sleep after 15 minutes without traffic, so the first visit after a pause takes about a minute.
 * **Architecture & RFP mapping:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)

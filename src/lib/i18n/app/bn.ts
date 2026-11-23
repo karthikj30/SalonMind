@@ -125,5 +125,12 @@ const bn: Record<string, string> = {
   "Package": "প্যাকেজ",
   "Sold packages": "বিক্রি হওয়া প্যাকেজ",
   "Issue & send": "ইস্যু করে পাঠান",
+  "Get the app": "অ্যাপ নিন",
+  "Get the SalonMind app": "SalonMind অ্যাপ নিন",
+  "Download for Android": "Android-এর জন্য ডাউনলোড করুন",
+  "Update app": "অ্যাপ আপডেট করুন",
+  "How updates work": "আপডেট কীভাবে হয়",
+  "Desktop installers": "ডেস্কটপ ইনস্টলার",
+  "Install in one click": "এক ক্লিকে ইনস্টল করুন",
 };
 export default bn;

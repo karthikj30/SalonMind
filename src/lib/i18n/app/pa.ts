@@ -125,5 +125,12 @@ const pa: Record<string, string> = {
   "Package": "ਪੈਕੇਜ",
   "Sold packages": "ਵੇਚੇ ਗਏ ਪੈਕੇਜ",
   "Issue & send": "ਜਾਰੀ ਕਰੋ ਤੇ ਭੇਜੋ",
+  "Get the app": "ਐਪ ਲਓ",
+  "Get the SalonMind app": "SalonMind ਐਪ ਲਓ",
+  "Download for Android": "Android ਲਈ ਡਾਊਨਲੋਡ ਕਰੋ",
+  "Update app": "ਐਪ ਅੱਪਡੇਟ ਕਰੋ",
+  "How updates work": "ਅੱਪਡੇਟ ਕਿਵੇਂ ਹੁੰਦੇ ਹਨ",
+  "Desktop installers": "ਡੈਸਕਟਾਪ ਇੰਸਟਾਲਰ",
+  "Install in one click": "ਇੱਕ ਕਲਿੱਕ ਵਿੱਚ ਇੰਸਟਾਲ ਕਰੋ",
 };
 export default pa;

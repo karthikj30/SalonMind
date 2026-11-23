@@ -125,5 +125,12 @@ const te: Record<string, string> = {
   "Package": "ప్యాకేజీ",
   "Sold packages": "అమ్మిన ప్యాకేజీలు",
   "Issue & send": "జారీ చేసి పంపండి",
+  "Get the app": "యాప్ పొందండి",
+  "Get the SalonMind app": "SalonMind యాప్ పొందండి",
+  "Download for Android": "Android కోసం డౌన్‌లోడ్ చేయండి",
+  "Update app": "యాప్ అప్‌డేట్ చేయండి",
+  "How updates work": "అప్‌డేట్‌లు ఎలా పనిచేస్తాయి",
+  "Desktop installers": "డెస్క్‌టాప్ ఇన్‌స్టాలర్లు",
+  "Install in one click": "ఒక్క క్లిక్‌లో ఇన్‌స్టాల్ చేయండి",
 };
 export default te;

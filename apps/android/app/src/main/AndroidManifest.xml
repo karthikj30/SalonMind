@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SalonMind for Android: a Trusted Web Activity. Chrome shows the live site full-screen, so every website release
+  reaches installed phones immediately — no reinstall. Microphone, notifications and sign-in work exactly as in Chrome.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Translucent.NoTitleBar">
+
+        <meta-data android:name="asset_statements" android:resource="@string/asset_statements" />
+
+        <activity
+            android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"
+            android:exported="true"
+            android:label="@string/app_name">
+            <meta-data android:name="android.support.customtabs.trusted.DEFAULT_URL" android:value="@string/launchUrl" />
+            <meta-data android:name="android.support.customtabs.trusted.STATUS_BAR_COLOR" android:resource="@color/plum" />
+            <meta-data android:name="android.support.customtabs.trusted.NAVIGATION_BAR_COLOR" android:resource="@color/plum" />
+            <meta-data android:name="android.support.customtabs.trusted.SPLASH_IMAGE_DRAWABLE" android:resource="@drawable/splash" />
+            <meta-data android:name="android.support.customtabs.trusted.SPLASH_SCREEN_BACKGROUND_COLOR" android:resource="@color/plum" />
+            <meta-data android:name="android.support.customtabs.trusted.SPLASH_SCREEN_FADE_OUT_DURATION" android:value="300" />
+            <meta-data android:name="android.support.customtabs.trusted.FILE_PROVIDER_AUTHORITY" android:value="app.salonmind.android.fileprovider" />
+            <meta-data android:name="android.support.customtabs.trusted.SCREEN_ORIENTATION" android:value="any" />
+            <!-- phones without Chrome (or another TWA browser) still work, inside a WebView -->
+            <meta-data android:name="android.support.customtabs.trusted.FALLBACK_STRATEGY" android:value="webview" />
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- links to the salon site (booking confirmations, manage-my-booking) open in the app -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="${hostName}" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name="com.google.androidbrowserhelper.trusted.FocusActivity" />
+        <activity android:name="com.google.androidbrowserhelper.trusted.WebViewFallbackActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="app.salonmind.android.fileprovider"
+            android:grantUriPermissions="true"
+            android:exported="false">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/filepaths" />
+        </provider>
+
+        <service
+            android:name="com.google.androidbrowserhelper.trusted.DelegationService"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.support.customtabs.trusted.TRUSTED_WEB_ACTIVITY_SERVICE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

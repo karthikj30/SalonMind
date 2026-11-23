@@ -7,3 +7,8 @@ out
 next-env.d.ts
 .vercel
 deploy/k8s/secret.yaml
+
+# Android signing keys never go in git
+*.jks
+*.keystore
+keystore.properties

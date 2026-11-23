@@ -442,6 +442,28 @@ try {
   await page.waitForURL(/\/app\/billing/);
   log("Ctrl+K → Billing");
 
+  // ── apps: download page, APK served with the Android type, asset links for the TWA, update banner for an old shell
+  {
+    await page.goto(`${BASE}/download`);
+    const apkHref = await page.locator("[data-download=android] a[download]").getAttribute("href");
+    const apk = await page.request.get(`${BASE}${apkHref}`);
+    if (apk.status() !== 200 || !/android\.package-archive/.test(apk.headers()["content-type"] ?? "")) throw new Error(`APK not served (${apk.status()} ${apk.headers()["content-type"]})`);
+    const links = await (await page.request.get(`${BASE}/.well-known/assetlinks.json`)).json();
+    if (links[0]?.target?.package_name !== "app.salonmind.android") throw new Error("assetlinks.json missing the Android package");
+    log(`download page: APK ${Math.round((await apk.body()).length / 1024)} KB, asset links OK`);
+    await page.goto(`${BASE}/open?shell=android&v=0`); // pretend to be an outdated Android app
+    await page.waitForURL(/\/app/);
+    const banner = page.locator("[data-app-update]");
+    await banner.waitFor({ timeout: 15_000 });
+    if ((await banner.locator("a").getAttribute("href")) !== apkHref) throw new Error("update banner should link to the APK");
+    log("outdated Android app → in-place update offered:", (await banner.textContent())?.replace(/\s+/g, " ").slice(0, 80));
+    await page.goto(`${BASE}/open?shell=android&v=999999`);
+    await page.waitForURL(/\/app/);
+    await page.waitForTimeout(1500);
+    if (await page.locator("[data-app-update]").count()) throw new Error("no update banner for an up-to-date app");
+    await ctx.clearCookies({ name: "sm_shell" });
+  }
+
   // ── Translator Agent: catalogue stored in Indian languages → salon page in Hindi
   await page.goto(`${BASE}/app/settings`);
   await submit(page.locator("form", { has: page.getByRole("button", { name: /Translate now|Translating/ }) }));
@@ -466,7 +488,7 @@ try {
     const slug = await page.evaluate(() => document.querySelector("a[href^='/s/']")?.getAttribute("href")) ?? null;
     if (!slug) throw new Error("public salon page link not found for the mobile audit");
     const routes = ["/app", "/app/bookings", "/app/inbox", "/app/clients", "/app/staff", "/app/services", "/app/inventory", "/app/marketing",
-      "/app/loyalty", "/app/billing", "/app/hr", "/app/agents", "/app/studio", "/app/settings", "/marketplace", ...(slug ? [slug, `${slug}/queue`] : []), ...(globalThis.__manageUrl ? [globalThis.__manageUrl] : [])];
+      "/app/loyalty", "/app/billing", "/app/hr", "/app/agents", "/app/studio", "/app/settings", "/marketplace", "/download", ...(slug ? [slug, `${slug}/queue`] : []), ...(globalThis.__manageUrl ? [globalThis.__manageUrl] : [])];
     const bad = [];
     for (const lang of ["en", "ta", "ur"]) {
       await page.context().addCookies([{ name: "sm_lang", value: lang, url: BASE }]);

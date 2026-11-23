@@ -10,7 +10,10 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "test:integration": "node --env-file=.env.local --conditions=react-server --import tsx --test --test-concurrency=1 tests/integration/*.test.mts",
     "worker": "node --env-file=.env.local --conditions=react-server --import tsx services/agent-worker/index.ts",
-    "i18n:extract": "node scripts/extract-ui-strings.mjs"
+    "i18n:extract": "node scripts/extract-ui-strings.mjs",
+    "icons": "node scripts/make-icons.mjs",
+    "app:android": "cd apps/android && ./gradlew assembleRelease && cp app/build/outputs/apk/release/app-release.apk ../../public/downloads/SalonMind.apk",
+    "app:desktop": "cd apps/desktop && npm ci && npm run dist"
   },
   "dependencies": {
     "@langchain/anthropic": "1.6.5",

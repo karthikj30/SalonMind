@@ -493,3 +493,29 @@ test("Prepaid reminders and the customer self-service window", () => {
   assert.deepEqual(manageWindow({ status: "cancelled", start_at: "2026-11-24T11:00:00Z" }, now), { canChange: false, reason: "closed" });
   assert.deepEqual(manageWindow({ status: "booked", start_at: "2026-11-23T09:00:00Z" }, now), { canChange: false, reason: "past" });
 });
+
+import { compareVersions, parseShell, shellUpdate } from "../src/lib/domain/apps.ts";
+import { readFileSync } from "node:fs";
+
+test("App shells: version parsing, comparison and when to offer an in-place update", () => {
+  const latest = { url: "https://x", android: { applicationId: "a", versionCode: 3, versionName: "1.2.0" }, desktop: { version: "1.10.0" } };
+  assert.deepEqual(parseShell("android:2"), { kind: "android", version: "2" });
+  assert.deepEqual(parseShell("pwa"), { kind: "pwa", version: "" });
+  assert.equal(parseShell("ios:1"), null);
+  assert.equal(parseShell("android:<script>"), null);
+  assert.equal(compareVersions("1.10.0", "1.9.3"), 1);
+  assert.equal(compareVersions("1.0", "1.0.0"), 0);
+  assert.deepEqual(shellUpdate(parseShell("android:2"), latest), { kind: "android", latest: "1.2.0" });
+  assert.equal(shellUpdate(parseShell("android:3"), latest), null);
+  assert.deepEqual(shellUpdate(parseShell("desktop:1.9.9"), latest), { kind: "desktop", latest: "1.10.0" });
+  assert.equal(shellUpdate(parseShell("pwa"), latest), null, "the installed web app is always current");
+});
+
+test("App versions: apps/version.json is the single source the Android build, desktop app and site agree on", () => {
+  const v = JSON.parse(readFileSync("apps/version.json", "utf8"));
+  const desktop = JSON.parse(readFileSync("apps/desktop/package.json", "utf8"));
+  assert.equal(desktop.version, v.desktop.version, "bump apps/desktop/package.json together with apps/version.json");
+  assert.ok(Number.isInteger(v.android.versionCode) && v.android.versionCode >= 1);
+  const links = JSON.parse(readFileSync("public/.well-known/assetlinks.json", "utf8"));
+  assert.equal(links[0].target.package_name, v.android.applicationId);
+});

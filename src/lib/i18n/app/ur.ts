@@ -125,5 +125,12 @@ const ur: Record<string, string> = {
   "Package": "پیکیج",
   "Sold packages": "فروخت شدہ پیکیج",
   "Issue & send": "جاری کریں اور بھیجیں",
+  "Get the app": "ایپ حاصل کریں",
+  "Get the SalonMind app": "SalonMind ایپ حاصل کریں",
+  "Download for Android": "Android کے لیے ڈاؤن لوڈ کریں",
+  "Update app": "ایپ اپ ڈیٹ کریں",
+  "How updates work": "اپ ڈیٹ کیسے ہوتے ہیں",
+  "Desktop installers": "ڈیسک ٹاپ انسٹالر",
+  "Install in one click": "ایک کلک میں انسٹال کریں",
 };
 export default ur;

@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.salonmind.android",
+      "sha256_cert_fingerprints": ["61:9D:DA:D9:C9:FF:B5:0B:45:EC:AD:AF:A6:BA:B6:8B:41:C3:D3:AF:E5:52:98:C6:6B:EB:60:1C:1B:AD:9B:AC"]
+    }
+  }
+]
