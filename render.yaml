@@ -1,0 +1,44 @@
+# Render Blueprint — deploys SalonMind as a free web service (Render dashboard → New → Blueprint → this repo).
+# Same Supabase database as the Vercel deployment; agents keep running from Supabase pg_cron.
+# Secrets are marked `sync: false`: Render asks for their values once, when the Blueprint is created.
+services:
+  - type: web
+    name: salonmind
+    runtime: node
+    plan: free
+    region: singapore          # closest Render region to India
+    branch: main
+    autoDeployTrigger: commit  # redeploy on every push to main
+    buildCommand: >-
+      npm ci --include=dev --no-audit --no-fund &&
+      npm run build &&
+      cp -r .next/static .next/standalone/.next/static &&
+      cp -r public .next/standalone/public
+    startCommand: HOSTNAME=0.0.0.0 node .next/standalone/server.js
+    healthCheckPath: /login
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        value: https://zgvsnlrzhucnybyrvtxn.supabase.co
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY   # publishable key (safe in the browser)
+        value: sb_publishable_GiF7hP40jPX81FHL6i6XKg_Vz4I_mY6
+      - key: NEXT_PUBLIC_APP_URL            # set to this service's URL after the first deploy
+        sync: false
+      - key: AGENT_BOT_EMAIL
+        value: agents@salonmind.app
+      - key: AGENT_BOT_PASSWORD
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+      # optional, free — same keys as on Vercel
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: HF_TOKEN
+        sync: false
+      - key: DATA_ENCRYPTION_KEY
+        sync: false
