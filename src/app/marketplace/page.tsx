@@ -37,7 +37,7 @@ export default async function Marketplace() {
         <div className="relative mx-auto max-w-5xl px-4 pb-10 pt-6">
           <nav className="mb-10 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2"><Logo className="h-8 w-8" /><span className="font-display text-lg font-semibold">SalonMind</span></Link>
-            <div className="flex items-center gap-1"><LanguagePicker value={lang} label={t.language} className="text-onplum hover:bg-white/10" /><ThemeToggle className="text-onplum" /><Link href="/signup" className="hidden rounded-xl border border-white/25 bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20 sm:inline-flex">{t.listSalon}</Link></div>
+            <div className="flex items-center gap-1"><LanguagePicker value={lang} label={t.language} className="text-onplum hover:bg-white/10" /><ThemeToggle className="text-onplum" /><Link href="/signup" className="hidden rounded-xl border border-white/25 bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20 sm:inline-flex">{t.listSalon}</Link><Link href="/signup" aria-label={t.listSalon} title={t.listSalon} className="grid h-9 w-9 place-items-center rounded-xl border border-white/25 bg-white/10 hover:bg-white/20 sm:hidden"><Store className="h-4 w-4" /></Link></div>
           </nav>
           <h1 className="animate-fade-up font-display text-3xl font-semibold sm:text-5xl">{t.findTitle}</h1>
           <p className="mt-2 text-onplum/80">{t.findSub}</p>

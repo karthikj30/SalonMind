@@ -9,6 +9,9 @@ const BASE = process.env.BASE_URL || "http://localhost:3000";
 const ts = Date.now().toString(36);
 const email = `e2e-${ts}@salonmind.test`;
 const shots = process.env.SHOTS_DIR;
+// SHOTS_VIEWPORT=1 → README-sized screenshots of what is on screen (scrolled to a section) instead of whole pages
+const viewportShots = !!process.env.SHOTS_VIEWPORT;
+const SALON = process.env.E2E_SALON_NAME || `E2E Test Salon ${ts}`;
 const log = (...a) => console.log("✔", ...a);
 
 // E2E_STT_WAV=/path/to/speech.wav feeds that recording to the microphone, to test on-device Whisper end to end
@@ -19,7 +22,13 @@ const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } })
 await ctx.addInitScript(() => { try { localStorage.setItem("sm_app_choice", "web"); } catch {} });
 const page = await ctx.newPage();
 page.setDefaultTimeout(90_000);
-const shot = async (name) => shots && page.screenshot({ path: `${shots}/${name}.png`, fullPage: true });
+const shot = async (name, at) => {
+  if (!shots) return;
+  if (at) await at.first().scrollIntoViewIfNeeded().catch(() => {});
+  else if (viewportShots) await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(viewportShots ? 700 : 0); // let reveal animations settle
+  await page.screenshot({ path: `${shots}/${name}.png`, fullPage: !viewportShots });
+};
 const flash = async () => (await page.locator(".bg-emerald-50, .bg-red-50").first().textContent().catch(() => ""))?.trim();
 // Server actions are soft navigations: wait for the pending (disabled) state to appear and clear.
 const submit = async (form) => {
@@ -49,6 +58,8 @@ async function voice(cmd) {
 }
 try {
   // ── sign up & onboard
+  await page.goto(`${BASE}/`); await shot("landing");
+  await shot("landing-extras", page.locator("[data-extras]"));
   await page.goto(`${BASE}/signup`);
   // the Voice Agent fills the sign-up form (never the password — that is typed)
   log("voice on sign-up:", await voice(`name E2E Owner email ${email}`));
@@ -57,7 +68,7 @@ try {
   await page.fill("input[name=password]", "Test12345!");
   await Promise.all([page.waitForURL(/onboarding/), page.click("button[type=submit]")]);
   log("signed up", email);
-  await page.fill("input[name=name]", `E2E Test Salon ${ts}`);
+  await page.fill("input[name=name]", SALON);
   await page.fill("input[name=city]", "Mumbai");
   await page.fill("input[name=gstin]", "27ABCDE1234F1Z5");
   await page.fill("textarea[name=description]", "Balayage specialists, bridal makeup and men's grooming.");
@@ -258,6 +269,7 @@ try {
   // ── procurement & all agents
   await page.goto(`${BASE}/app/inventory`);
   await submit(page.locator("form", { has: page.locator("input[name=agent][value=inventory]") })); await expectOk("procurement agent");
+  await shot("inventory");
   await page.goto(`${BASE}/app/agents`);
   await submit(page.locator("form", { has: page.locator("input[name=agent][value=all]") }).first()); await expectOk("orchestrator");
   await shot("agents");
@@ -273,14 +285,17 @@ try {
   await f.locator("input[name=name]").fill("Meena K");
   await f.locator("textarea[name=resume_text]").fill("Hair colourist with 5 years experience at Lakme Salon Pune. L'Oreal Professionnel certified in balayage and global colour. Comfortable with weekend shifts.");
   await submit(f); await expectOk("candidate screened");
+  await shot("hr");
 
   // ── payroll
   await page.goto(`${BASE}/app/staff`);
   await submit(formWith("Run payroll")); await expectOk("payroll");
+  await shot("staff-payroll", page.locator("form", { has: page.locator("input[name=from]") }));
 
   // ── studio
   await page.goto(`${BASE}/app/studio`);
   await submit(formWith("Describe your dashboard")); await expectOk("AI studio layout");
+  await shot("studio");
 
   // ── growth features: leave, waitlist, reschedule, past visits, memberships & wallet
   await page.goto(`${BASE}/app/staff`);
@@ -393,6 +408,7 @@ try {
     await f.locator("input[name=processing_min]").fill("35");
     await submit(f); await expectOk("colour formula saved");
     log("consultation card patch status:", await page.locator("[data-patch-status]").getAttribute("data-patch-status"));
+    await shot("client-card");
     await page.goto(`${BASE}/app/billing`);
     f = page.locator("form", { has: page.locator("select[name=category]") }).first();
     await f.locator("select[name=category]").selectOption("rent");
@@ -402,6 +418,7 @@ try {
     const pnl = (await page.locator("[data-pnl]").textContent())?.replace(/\s+/g, " ") ?? "";
     if (!/Net profit/.test(pnl) || !/rent/i.test(pnl)) throw new Error("P&L missing: " + pnl.slice(0, 200));
     log("profit & loss:", pnl.slice(0, 140));
+    await shot("billing-pnl", page.locator("[data-pnl]"));
   }
   await page.goto(`${BASE}/app/bookings?date=${tomorrow}`);
   f = formWith("Waitlist");
@@ -413,14 +430,21 @@ try {
   await submit(rf); await expectOk("reschedule");
   await shot("growth");
 
+  await page.goto(`${BASE}/app/marketing`); await shot("marketing");
+  await page.goto(`${BASE}/app`); await page.waitForLoadState("networkidle"); await shot("dashboard");
+  await page.goto(`${BASE}/app/loyalty`); await shot("loyalty");
+  await page.goto(`${BASE}/download`); await shot("download");
   // ── marketplace (public)
   await page.goto(`${BASE}/marketplace`);
   await page.fill("input[placeholder^='e.g.']", "balayage under ₹3500 in Mumbai available tomorrow evening");
   await page.click("button:has-text('Search')");
   await page.waitForSelector("text=How the AI understood this", { timeout: 60_000 });
-  const found = await page.locator(`text=E2E Test Salon ${ts}`).count();
+  const found = await page.locator(`text=${SALON}`).count();
   log("marketplace search results include salon:", found > 0);
-  await shot("marketplace");
+  await shot("marketplace", page.locator("text=How the AI understood this"));
+  await page.locator(`a:has-text("${SALON}")`).first().click().catch(() => {});
+  await page.waitForURL(/\/s\//, { timeout: 15_000 }).catch(() => {});
+  if (/\/s\//.test(page.url())) await shot("salon-page");
   if (!found) throw new Error("marketplace search did not find the salon");
 
   // ── Owner dashboard in Indian languages: Hindi from the sidebar picker, a Hindi voice command, Urdu right-to-left
@@ -486,6 +510,10 @@ try {
     if (order[0] !== first || !order.includes("web")) throw new Error(`${label}: unexpected chooser order ${order}`);
     if (first === "android" && (await sheet.locator("[data-choice=android]").getAttribute("href")) !== "/downloads/SalonMind.apk") throw new Error("APK link missing");
     await sheet.locator("[data-choice=web]").click();
+    if (first === "android") { // phone header: every desktop link is in the menu
+      await p.locator("[data-mobile-nav] summary").click();
+      for (const name of ["Find a salon", "Get the app", "Log in"]) await p.locator("[data-mobile-nav] nav").getByRole("link", { name }).waitFor({ timeout: 5000 });
+    }
     await p.reload();
     await p.waitForTimeout(1200);
     if (await p.locator("[data-get-app]").count()) throw new Error(`${label}: chooser shown again after "continue on the web"`);
@@ -584,7 +612,7 @@ try {
     await page.fill("input[name=confirm]", "DELETE");
     await Promise.all([page.waitForURL((u) => !u.pathname.startsWith("/app"), { timeout: 60_000 }), page.click("button:has-text('Delete')")]);
     await page.goto(`${BASE}/marketplace`);
-    if (await page.locator(`text=E2E Test Salon ${ts}`).count()) throw new Error("salon still listed after account deletion");
+    if (await page.locator(`text=${SALON}`).count()) throw new Error("salon still listed after account deletion");
     log("account + salon deleted (DPDP erasure)");
   }
 

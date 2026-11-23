@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { GetAppChooser } from "@/components/GetAppChooser";
-import { ArrowRight, Bot, CalendarClock, MessagesSquare, Package, Receipt, Search, Sparkles, UserRoundSearch, Workflow, Languages, IndianRupee, ShieldCheck } from "lucide-react";
+import { ArrowRight, Bot, CalendarClock, MessagesSquare, Package, Receipt, Search, Sparkles, UserRoundSearch, Workflow, Languages, IndianRupee, ShieldCheck, Menu, Store, Smartphone, LogIn, Mic, Ticket, Gift, FlaskConical, TrendingUp } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { SalonArt } from "@/components/SalonArt";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -15,7 +15,16 @@ const MODULES = [
   [Receipt, "GST billing & POS", "UPI, card and wallet checkout, booth-renter split payouts, CGST/SGST/IGST invoices and GSTR drafts."],
 ] as const;
 
-const FACTS = [[Bot, "16 AI agents", "working together"], [Languages, "10 Indian languages", "in every conversation"], [IndianRupee, "₹0 to run", "on free tiers"], [ShieldCheck, "DPDP-ready", "consent, export, erasure"]] as const;
+const EXTRAS = [
+  [Mic, "Voice agent", "Say “open bookings” or “add client Meera” in Hindi, Tamil or 11 more languages — Groq Whisper or on-device speech."],
+  [Ticket, "Walk-in token queue", "QR self check-in, live wait times from the stylists' real calendar, and a WhatsApp ping when the turn is near."],
+  [Gift, "Gift cards & packages", "Vouchers sold without GST and redeemed after tax, prepaid session packages, and reminders before they expire."],
+  [FlaskConical, "Colour safety", "Formula cards and patch tests per client; the Safety Agent asks for a test 48 hours before every colour service."],
+  [TrendingUp, "Real profit & payroll", "Clock-in attendance feeds payroll, the expense book feeds a monthly profit & loss next to the GST drafts."],
+  [Smartphone, "Android & desktop apps", "One-tap APK and desktop apps that open the live salon — new features arrive without reinstalling."],
+] as const;
+
+const FACTS = [[Bot, "22 AI agents", "working together"], [Languages, "13 languages", "12 Indian + English, Urdu right-to-left"], [IndianRupee, "₹0 to run", "on free tiers"], [ShieldCheck, "DPDP-ready", "consent, export, erasure"]] as const;
 
 export default function Home() {
   return (
@@ -26,12 +35,25 @@ export default function Home() {
         <div className="relative mx-auto max-w-6xl px-4 pb-20 pt-6">
           <nav className="mb-14 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2.5"><Logo className="h-9 w-9" /><span className="font-display text-xl font-semibold">SalonMind</span></Link>
-            <div className="flex items-center gap-1 text-sm">
-              <Link href="/marketplace" className="hidden rounded-xl px-3 py-2 text-onplum hover:bg-white/10 sm:inline">Find a salon</Link>
-              <Link href="/download" className="hidden rounded-xl px-3 py-2 text-onplum hover:bg-white/10 md:inline">Get the app</Link>
-              <ThemeToggle className="hidden px-3 py-2 text-onplum sm:inline-flex" />
+            <div className="hidden items-center gap-1 text-sm md:flex">
+              <Link href="/marketplace" className="rounded-xl px-3 py-2 text-onplum hover:bg-white/10">Find a salon</Link>
+              <Link href="/download" className="rounded-xl px-3 py-2 text-onplum hover:bg-white/10">Get the app</Link>
+              <ThemeToggle className="px-3 py-2 text-onplum" />
               <Link href="/login" className="rounded-xl px-3 py-2 text-onplum hover:bg-white/10">Log in</Link>
               <Link href="/signup" className="rounded-xl bg-champ-400 px-4 py-2 font-medium text-ink hover:bg-champ-300">List your salon</Link>
+            </div>
+            {/* phones and small tablets: the same links in a menu (native <details>, works before JavaScript loads) */}
+            <div className="flex items-center gap-1.5 md:hidden">
+              <Link href="/signup" className="rounded-xl bg-champ-400 px-3 py-2 text-sm font-medium text-ink hover:bg-champ-300">List your salon</Link>
+              <details className="group relative" data-mobile-nav>
+                <summary className="grid h-10 w-10 cursor-pointer list-none place-items-center rounded-xl border border-white/25 bg-white/10 text-onplum [&::-webkit-details-marker]:hidden" aria-label="Menu"><Menu className="h-5 w-5" /></summary>
+                <nav className="absolute right-0 z-30 mt-2 w-60 animate-scale-in overflow-hidden rounded-2xl border border-brand-100 bg-ivory-50 p-1.5 text-sm text-brand-900 shadow-lift" aria-label="Main">
+                  <Link href="/marketplace" className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 hover:bg-brand-50"><Store className="h-4 w-4 text-rose-gold" />Find a salon</Link>
+                  <Link href="/download" className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 hover:bg-brand-50"><Smartphone className="h-4 w-4 text-rose-gold" />Get the app</Link>
+                  <Link href="/login" className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 hover:bg-brand-50"><LogIn className="h-4 w-4 text-rose-gold" />Log in</Link>
+                  <div className="mt-1 flex items-center justify-between border-t border-brand-100 px-3 pt-2 text-xs text-brand-900/60">Theme<ThemeToggle className="text-brand-800" /></div>
+                </nav>
+              </details>
             </div>
           </nav>
           <div className="grid items-center gap-10 lg:grid-cols-[1.1fr_.9fr]">
@@ -77,6 +99,21 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="mx-auto max-w-6xl px-4 pb-16">
+        <Reveal>
+          <p className="text-center text-xs font-semibold uppercase tracking-[0.2em] text-gold-600">Beyond the brief</p>
+          <h2 className="mt-2 text-center font-display text-3xl font-semibold text-brand-900 sm:text-4xl">Built for how Indian salons really work</h2>
+        </Reveal>
+        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-extras>
+          {EXTRAS.map(([Icon, title, body], i) => (
+            <Reveal key={title} delay={i * 80}><div className="lift flex h-full gap-4 rounded-2xl border border-brand-100 bg-surface p-5 shadow-soft">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-champagne text-gold-700"><Icon className="h-5 w-5" /></span>
+              <div><h3 className="font-semibold text-brand-900">{title}</h3><p className="mt-1 text-sm leading-relaxed text-brand-900/65">{body}</p></div>
+            </div></Reveal>
+          ))}
+        </div>
+      </section>
+
       <section className="bg-champagne/60">
         <div className="mx-auto max-w-6xl px-4 py-16">
           <div className="flex items-center gap-2 text-gold-700"><Workflow className="h-5 w-5" /><p className="text-xs font-semibold uppercase tracking-[0.2em]">How the agents work together</p></div>
@@ -93,7 +130,7 @@ export default function Home() {
 
       <footer className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-10 text-xs text-brand-900/50">
         <span className="flex items-center gap-2"><Logo className="h-6 w-6" />SalonMind · built for Indian salons</span>
-        <span>Runs on free tiers: Vercel · Supabase · Groq / Gemini / OpenRouter free models</span>
+        <span className="flex flex-wrap gap-x-3"><Link href="/download" className="hover:text-brand-700">Android & desktop apps</Link><Link href="/marketplace" className="hover:text-brand-700">Find a salon</Link><span>Runs on free tiers: Vercel · Render · Supabase · Groq</span></span>
       </footer>
       <GetAppChooser />
     </main>

@@ -88,9 +88,9 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
             <table className="w-full text-sm">
               <tbody>
                 {([["Revenue (excl. GST)", pnl.revenue, ""], ["  of which services", pnl.serviceRevenue, "sub"], ["  of which retail", pnl.productSales, "sub"], ["Product cost (retail + back-bar)", -pnl.productCost, ""], ["Gross profit", pnl.grossProfit, "b"], ["Staff cost (payroll + PF/ESI)", -pnl.payroll, ""], ["Expenses", -pnl.expenses, ""]] as const).map(([l, v, k]) => (
-                  <tr key={l} className={k === "b" ? "border-t font-semibold" : ""}><td className={`py-1 ${k === "sub" ? "ps-4 text-xs text-brand-900/55" : ""}`}>{l.trim()}</td><td className={`text-right ${k === "sub" ? "text-xs text-brand-900/55" : ""}`}>{inr(v)}</td></tr>
+                  <tr key={l} className={k === "b" ? "border-t font-semibold" : ""}><td className={`py-1 ${k === "sub" ? "ps-4 text-xs text-brand-900/55" : ""}`}>{l.trim()}</td><td className={`text-right ${k === "sub" ? "text-xs text-brand-900/55" : ""}`}>{v < 0 ? `−${inr(-v)}` : inr(v)}</td></tr>
                 ))}
-                <tr className="border-t-2 border-brand-200 text-base font-bold"><td className="py-1.5">Net profit</td><td className={`text-right ${pnl.net < 0 ? "text-red-700" : "text-emerald-700"}`}>{inr(pnl.net)}</td></tr>
+                <tr className="border-t-2 border-brand-200 text-base font-bold"><td className="py-1.5">Net profit</td><td className={`text-right ${pnl.net < 0 ? "text-red-700" : "text-emerald-700"}`}>{pnl.net < 0 ? `−${inr(-pnl.net)}` : inr(pnl.net)}</td></tr>
               </tbody>
             </table>
             <div className="text-sm">
