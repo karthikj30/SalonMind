@@ -19,19 +19,31 @@ on free tiers**.
 
 ## Look & feel
 
-A luxury-salon design system — deep plum, blush rose-gold and champagne on ivory, Playfair Display + Inter,
-line icons — with a visual stylist day-calendar, grouped navigation (mobile drawer), installable PWA, and a
-redesigned marketplace and salon booking page. Screenshots below come from an automated test salon.
+A luxury-salon design — deep plum, blush rose-gold and champagne gold on warm ivory, Playfair Display headings with
+Inter body text, matching line icons and hand-drawn illustrations (no stock photos). The screenshots below were taken
+on the live site by the automated end-to-end test, which creates a salon through the real UI and deletes it afterwards.
+Every page also works on phones (tab bar, drawer menu and voice button).
 
-| Landing | Dashboard | Day calendar |
-|---|---|---|
-| ![Landing](docs/screenshots/landing.jpg) | ![Dashboard](docs/screenshots/dashboard.jpg) | ![Bookings](docs/screenshots/bookings.jpg) |
-| **Marketplace** | **Salon page** | **Mobile menu** |
-| ![Marketplace](docs/screenshots/marketplace.jpg) | ![Salon](docs/screenshots/salon.jpg) | ![Mobile](docs/screenshots/m-menu.jpg) |
-| **WhatsApp-style unified inbox** | **Inbox on a phone** | **Marketplace in Urdu (RTL)** |
-| ![Inbox](docs/screenshots/inbox-whatsapp.jpg) | ![Phone inbox](docs/screenshots/m-inbox.jpg) | ![Urdu](docs/screenshots/m-urdu.jpg) |
-| **Walk-in queue (public QR page)** | **Phone tab bar + voice button** | |
-| ![Queue](docs/screenshots/queue.jpg) | ![Tabs](docs/screenshots/m-tabs.jpg) | |
+| | |
+|---|---|
+| ![Landing page](docs/screenshots/landing.jpg) | ![Owner dashboard](docs/screenshots/dashboard.jpg) |
+| **Landing page** — The pitch, six RFP modules and what goes beyond the brief; first visit offers the Android app, desktop app or the web. | **Owner dashboard** — Today at a glance — bookings, revenue, clients at churn risk and live marketplace deals, laid out by the AI Studio. |
+| ![Agent Console](docs/screenshots/agents.jpg) | ![Unified inbox (Module 2)](docs/screenshots/inbox.jpg) |
+| **Agent Console** — 22 agents on an event bus, each run logged with the model that answered (Groq gpt-oss-120b, rules fallback). | **Unified inbox (Module 2)** — WhatsApp-style inbox: the AI concierge proposes a slot in Hinglish, books on “yes” and sends a manage-my-booking link. |
+| ![Matrix scheduling (Module 3)](docs/screenshots/growth.jpg) | ![Billing, GST & profit (Module 6)](docs/screenshots/billing-pnl.jpg) |
+| **Matrix scheduling (Module 3)** — Stylist day calendar; the scheduler matches skill × room × equipment × margin and prices wedding-season demand. | **Billing, GST & profit (Module 6)** — Day-end closing, monthly profit & loss (revenue without GST, stock at cost, staff, expenses) and GSTR drafts. |
+| ![Consumer marketplace (Module 5)](docs/screenshots/marketplace.jpg) | ![Salon booking page](docs/screenshots/salon-page.jpg) |
+| **Consumer marketplace (Module 5)** — Plain-language search — “balayage under ₹3500 tomorrow evening” — with live slots and deals across salons. | **Salon booking page** — Public menu, live slots with yield pricing, UPI deposit QR and an AI chat; available in 13 languages. |
+| ![Inventory & procurement (Module 1)](docs/screenshots/inventory.jpg) | ![Recruitment (Module 4)](docs/screenshots/hr.jpg) |
+| **Inventory & procurement (Module 1)** — Stock forecasts (usage × bookings × festival demand) and purchase orders drafted and negotiated by agents. | **Recruitment (Module 4)** — AI-written job ads for Naukri / Apna / Instagram, resume scoring and a chat screening interview. |
+| ![Attendance & payroll (Module 4)](docs/screenshots/staff-payroll.jpg) | ![Memberships, gift cards & packages](docs/screenshots/loyalty-prepaid.jpg) |
+| **Attendance & payroll (Module 4)** — Clock-in / clock-out feeding payroll: slab commissions, PF / ESI / PT and loss of pay for absences. | **Memberships, gift cards & packages** — Memberships with wallet credit, gift cards sold without GST and prepaid service packages. |
+| ![Client consultation card](docs/screenshots/client-card.jpg) | ![Walk-in token queue](docs/screenshots/queue-public.jpg) |
+| **Client consultation card** — Colour formulas and patch tests; the Safety Agent asks for a test 48 h before any colour service. | **Walk-in token queue** — QR self check-in with live wait times from the real calendar; customers' names are never shown. |
+| ![AI Studio](docs/screenshots/studio.jpg) | ![Get the app](docs/screenshots/download.jpg) |
+| **AI Studio** — Describe the dashboard or a workflow in plain language; agents are tuned and widgets generated within safe limits. | **Get the app** — Android APK (QR) and desktop apps that open the live salon, so updates arrive without reinstalling. |
+| ![Manage my booking (Tamil)](docs/screenshots/manage-booking.jpg) | ![Dashboard in Urdu](docs/screenshots/dashboard-urdu.jpg) |
+| **Manage my booking (Tamil)** — Customers move or cancel their own appointment from the link in their confirmation, in their language. | **Dashboard in Urdu** — The whole owner dashboard in 13 languages; Urdu switches to right-to-left. |
 
 ## Stack (all free)
 

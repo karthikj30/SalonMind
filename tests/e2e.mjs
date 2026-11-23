@@ -26,6 +26,8 @@ const shot = async (name, at) => {
   if (!shots) return;
   if (at) await at.first().scrollIntoViewIfNeeded().catch(() => {});
   else if (viewportShots) await page.evaluate(() => window.scrollTo(0, 0));
+  // README shots: keep the mic button but hide the voice assistant's last-reply bubble left over from earlier steps
+  if (viewportShots) await page.addStyleTag({ content: "[data-voice-assistant] > div { display: none !important; }" }).catch(() => {});
   await page.waitForTimeout(viewportShots ? 700 : 0); // let reveal animations settle
   await page.screenshot({ path: `${shots}/${name}.png`, fullPage: !viewportShots });
 };
@@ -269,7 +271,7 @@ try {
   // ── procurement & all agents
   await page.goto(`${BASE}/app/inventory`);
   await submit(page.locator("form", { has: page.locator("input[name=agent][value=inventory]") })); await expectOk("procurement agent");
-  await shot("inventory");
+  await page.goto(`${BASE}/app/inventory`); await shot("inventory");
   await page.goto(`${BASE}/app/agents`);
   await submit(page.locator("form", { has: page.locator("input[name=agent][value=all]") }).first()); await expectOk("orchestrator");
   await shot("agents");
@@ -411,12 +413,12 @@ try {
     await shot("client-card");
     await page.goto(`${BASE}/app/billing`);
     f = page.locator("form", { has: page.locator("select[name=category]") }).first();
-    await f.locator("select[name=category]").selectOption("rent");
-    await f.locator("input[name=amount]").fill("5000");
-    await f.locator("input[name=note]").fill("November rent");
+    await f.locator("select[name=category]").selectOption("utilities");
+    await f.locator("input[name=amount]").fill("1500");
+    await f.locator("input[name=note]").fill("Electricity bill");
     await submit(f); await expectOk("expense recorded");
     const pnl = (await page.locator("[data-pnl]").textContent())?.replace(/\s+/g, " ") ?? "";
-    if (!/Net profit/.test(pnl) || !/rent/i.test(pnl)) throw new Error("P&L missing: " + pnl.slice(0, 200));
+    if (!/Net profit/.test(pnl) || !/utilities/i.test(pnl)) throw new Error("P&L missing: " + pnl.slice(0, 200));
     log("profit & loss:", pnl.slice(0, 140));
     await shot("billing-pnl", page.locator("[data-pnl]"));
   }
