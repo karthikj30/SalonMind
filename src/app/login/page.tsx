@@ -3,18 +3,20 @@ import { signIn } from "../auth-actions";
 import { Field, Input, Flash } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import { AuthShell } from "@/components/AuthShell";
-import { EmailCodeAuth } from "@/components/auth/EmailCodeAuth";
+import { ClerkAuth } from "@/components/auth/ClerkAuth";
+import { getDict } from "@/lib/i18n/server";
 import { clerkEnabled } from "@/lib/auth/clerk";
 
 export const metadata = { title: "Log in" };
 
 export default async function Login({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const sp = await searchParams;
+  const { lang } = await getDict();
   return (
     <AuthShell title="Welcome back" subtitle="Log in to your salon's command centre.">
       <Flash error={sp.error} msg={sp.msg} />
       {clerkEnabled ? (
-        <EmailCodeAuth mode="login" />
+        <ClerkAuth mode="login" lang={lang} />
       ) : (
         <form action={signIn} className="space-y-4 rounded-2xl border border-brand-100 bg-surface p-6 shadow-soft">
           <Field label="Email"><Input name="email" type="email" required autoComplete="email" /></Field>

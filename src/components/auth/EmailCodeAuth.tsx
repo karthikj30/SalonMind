@@ -1,21 +1,12 @@
 "use client";
-import { ClerkProvider, useClerk, useSignIn, useSignUp } from "@clerk/nextjs";
+import { useClerk, useSignIn, useSignUp } from "@clerk/nextjs";
 import { isClerkAPIResponseError } from "@clerk/nextjs/errors";
 import { Loader2, Mail, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Field, Input } from "@/components/ui";
-import { CLERK_PUBLISHABLE_KEY } from "@/lib/auth/clerk";
+import { openSalon } from "@/lib/auth/open-salon";
 
 type Mode = "login" | "signup";
-
-/** Clerk's email one-time code for log in and sign up. Clerk is loaded on these two pages only. */
-export function EmailCodeAuth({ mode }: { mode: Mode }) {
-  return (
-    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} afterSignOutUrl={mode === "signup" ? "/signup" : "/login"}>
-      <EmailCodeForm mode={mode} />
-    </ClerkProvider>
-  );
-}
 
 /** Sign-up needs no password from the person: a random one satisfies a Clerk app that still has passwords on. */
 function randomPassword(): string {
@@ -31,7 +22,8 @@ function messageOf(e: unknown): string {
 /** Clerk error codes, from an API error (several) or a plain Clerk error (one). */
 const codesOf = (e: unknown): string[] => (isClerkAPIResponseError(e) ? e.errors.map((x) => x.code) : typeof (e as { code?: unknown })?.code === "string" ? [(e as { code: string }).code] : []);
 
-function EmailCodeForm({ mode }: { mode: Mode }) {
+/** The 6-digit email code for log in and sign up (inside ClerkAuth's provider): a new email registers, a known one logs in. */
+export function EmailCodeForm({ mode, onBack }: { mode: Mode; onBack: () => void }) {
   const clerk = useClerk();
   // Clerk's current custom-flow API: its calls also run Clerk's bot check (Protect) in a modal when needed
   const { signIn } = useSignIn();
@@ -46,11 +38,6 @@ function EmailCodeForm({ mode }: { mode: Mode }) {
   const [info, setInfo] = useState<string | null>(null);
   const codeInput = useRef<HTMLInputElement>(null);
   const ready = clerk.loaded;
-
-  // Every log in starts fresh: a Clerk session left in this browser never opens a salon by itself
-  useEffect(() => {
-    if (clerk.loaded && clerk.session) void clerk.signOut(() => undefined);
-  }, [clerk, clerk.loaded]);
 
   useEffect(() => {
     if (step === "code") codeInput.current?.focus();
@@ -106,17 +93,7 @@ function EmailCodeForm({ mode }: { mode: Mode }) {
         if (done.error) throw done.error;
       }
       setStep("opening");
-      const token = await clerk.session?.getToken();
-      const res = await fetch("/auth/clerk", {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${token ?? ""}` },
-        body: JSON.stringify({ name: name.trim() }),
-      });
-      const j = (await res.json().catch(() => ({}))) as { next?: string; error?: string };
-      // The salon app runs on its own session from here; the Clerk one is no longer needed
-      await clerk.signOut(() => undefined).catch(() => undefined);
-      if (!res.ok) throw new Error(j.error ?? "Could not open your account. Try again.");
-      window.location.assign(j.next ?? "/app");
+      window.location.assign(await openSalon(clerk, name));
     } catch (err) {
       setStep("code");
       setError(messageOf(err));
@@ -169,6 +146,9 @@ function EmailCodeForm({ mode }: { mode: Mode }) {
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700" role="alert">{error}</p>}
       {/* Clerk's bot check renders here when it needs to */}
       <div id="clerk-captcha" />
+      <p className="border-t border-brand-100 pt-3 text-center text-xs">
+        <button type="button" className="font-medium text-brand-900/60 hover:text-brand-900" disabled={busy} onClick={onBack}>Back to the usual sign-in window</button>
+      </p>
     </div>
   );
 }

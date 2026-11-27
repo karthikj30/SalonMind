@@ -142,12 +142,14 @@ with `supabase/bootstrap_agent.sql` (set your own email/password).
 | Google Gemini (2.5 Flash, embeddings, vision) | aistudio.google.com/apikey | `GEMINI_API_KEY` |
 | OpenRouter free models | openrouter.ai/keys | `OPENROUTER_API_KEY` |
 
-## Email-code login (optional, free)
+## Clerk sign-in (optional, free)
 
-Create a free application at [dashboard.clerk.com](https://dashboard.clerk.com) with **Email address** as the sign-in
-identifier, then set `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` (Clerk → API keys). Log in and sign up
-then ask for a 6-digit code sent by email instead of a password; existing owners sign in with the same email and keep
-their salons. Email codes are on Clerk's free plan (SMS codes need a paid plan).
+Create a free application at [dashboard.clerk.com](https://dashboard.clerk.com) and set `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+and `CLERK_SECRET_KEY` (Clerk → API keys; Development keys work on `*.vercel.app`). Log in and sign up then show Clerk's
+own window (email + password, Google, Apple, Microsoft) with **Get a one-time code by email instead** for a 6-digit
+code without a password. Every Clerk sign-in opens the matching SalonMind account (`/auth/continue` → `/auth/clerk`);
+existing owners sign in with the same email and keep their salons. Email codes are on Clerk's free plan (SMS codes need
+a paid plan).
 
 After adding `GEMINI_API_KEY`, click **Settings → Re-index services** to switch search to semantic embeddings.
 

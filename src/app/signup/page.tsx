@@ -3,18 +3,20 @@ import { signUp } from "../auth-actions";
 import { Field, Input, Flash } from "@/components/ui";
 import { SubmitButton } from "@/components/SubmitButton";
 import { AuthShell } from "@/components/AuthShell";
-import { EmailCodeAuth } from "@/components/auth/EmailCodeAuth";
+import { ClerkAuth } from "@/components/auth/ClerkAuth";
+import { getDict } from "@/lib/i18n/server";
 import { clerkEnabled } from "@/lib/auth/clerk";
 
 export const metadata = { title: "Create account" };
 
 export default async function Signup({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const sp = await searchParams;
+  const { lang } = await getDict();
   return (
     <AuthShell title="Create your account" subtitle="Free forever on the starter tier. Set up takes about 5 minutes.">
       <Flash error={sp.error} />
       {clerkEnabled ? (
-        <EmailCodeAuth mode="signup" />
+        <ClerkAuth mode="signup" lang={lang} />
       ) : (
         <form action={signUp} className="space-y-4 rounded-2xl border border-brand-100 bg-surface p-6 shadow-soft">
           <Field label="Your name"><Input name="name" required autoComplete="name" /></Field>
