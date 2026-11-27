@@ -142,6 +142,13 @@ with `supabase/bootstrap_agent.sql` (set your own email/password).
 | Google Gemini (2.5 Flash, embeddings, vision) | aistudio.google.com/apikey | `GEMINI_API_KEY` |
 | OpenRouter free models | openrouter.ai/keys | `OPENROUTER_API_KEY` |
 
+## Email-code login (optional, free)
+
+Create a free application at [dashboard.clerk.com](https://dashboard.clerk.com) with **Email address** as the sign-in
+identifier, then set `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` (Clerk → API keys). Log in and sign up
+then ask for a 6-digit code sent by email instead of a password; existing owners sign in with the same email and keep
+their salons. Email codes are on Clerk's free plan (SMS codes need a paid plan).
+
 After adding `GEMINI_API_KEY`, click **Settings → Re-index services** to switch search to semantic embeddings.
 
 ## Tests

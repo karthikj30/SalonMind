@@ -20,7 +20,7 @@ export const SOURCES = [
   "src/components/ui.tsx", "src/components/AuthShell.tsx", "src/components/DayCalendar.tsx", "src/components/Widgets.tsx",
   "src/components/VoiceAssistant.tsx", "src/components/CommandPalette.tsx", "src/components/ThemeToggle.tsx",
   "src/components/SubmitButton.tsx", "src/lib/services/metrics.ts", "src/lib/domain/voice.ts",
-  "src/app/download/page.tsx", "src/components/AppUpdateBanner.tsx", "src/components/InstallAppButton.tsx", "src/components/GetAppChooser.tsx",
+  "src/app/download/page.tsx", "src/components/auth/EmailCodeAuth.tsx", "src/components/AppUpdateBanner.tsx", "src/components/InstallAppButton.tsx", "src/components/GetAppChooser.tsx",
 ];
 const ATTRS = new Set(["title", "label", "placeholder", "subtitle", "eyebrow", "hint", "pendingText", "aria-label", "empty", "alt"]);
 const PROPS = new Set(["label", "title", "hint"]);

@@ -4,8 +4,10 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { botClient } from "@/lib/supabase/bot";
 import { TENANT_COOKIE } from "@/lib/tenant";
+import { clerkEnabled, clerkServerEnabled } from "@/lib/auth/clerk";
 
 export async function signIn(fd: FormData) {
+  if (clerkEnabled) redirect(`/login?error=${encodeURIComponent("Log in with the code we email you.")}`);
   const db = await createClient();
   const { error } = await db.auth.signInWithPassword({ email: String(fd.get("email")).trim(), password: String(fd.get("password")) });
   if (error) redirect(`/login?error=${encodeURIComponent(error.message)}`);
@@ -13,6 +15,7 @@ export async function signIn(fd: FormData) {
 }
 
 export async function signUp(fd: FormData) {
+  if (clerkEnabled) redirect(`/signup?error=${encodeURIComponent("Sign up with the code we email you.")}`);
   const email = String(fd.get("email")).trim().toLowerCase();
   const password = String(fd.get("password"));
   const name = String(fd.get("name") ?? "").trim();
@@ -63,8 +66,20 @@ export async function createSalon(fd: FormData) {
 export async function deleteMyAccount(fd: FormData) {
   if (String(fd.get("confirm")) !== "DELETE") redirect("/app/settings?error=" + encodeURIComponent("Type DELETE to confirm"));
   const db = await createClient();
+  const { data: { user } } = await db.auth.getUser();
   const { error } = await db.rpc("delete_my_account");
   if (error) redirect("/app/settings?error=" + encodeURIComponent(error.message));
+  if (user?.email && clerkServerEnabled()) {
+    // The email-code sign-in account at Clerk goes too
+    try {
+      const { createClerkClient } = await import("@clerk/nextjs/server");
+      const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY! });
+      const { data } = await clerk.users.getUserList({ emailAddress: [user.email] });
+      await Promise.all(data.map((u) => clerk.users.deleteUser(u.id)));
+    } catch (e) {
+      console.error("clerk user delete failed", (e as Error).message);
+    }
+  }
   await db.auth.signOut();
   (await cookies()).delete(TENANT_COOKIE);
   redirect("/?msg=account-deleted");

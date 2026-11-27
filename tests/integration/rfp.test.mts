@@ -858,4 +858,29 @@ describe("Platform — orchestrator, self-optimizer, generative UI, multi-tenanc
       assert.equal((await db.from("tenants").select("id").eq("id", t)).data!.length, 0);
     }
   });
+
+  test("Clerk email-code sign-in: the bridge opens the same Supabase account and never the agent account", async () => {
+    const email = `it-${ts}-clerk@salonmind.test`;
+    const p1 = `bridge-one-${ts}-0123456789abcdefghij`, p2 = `bridge-two-${ts}-0123456789abcdefghij`;
+    const first = await db.rpc("clerk_bridge_user", { p_email: email, p_password: p1, p_name: "Clerk Owner" });
+    assert.ifError(first.error);
+    const u = mk();
+    assert.ifError((await u.auth.signInWithPassword({ email, password: p1 })).error, "a new email gets an account");
+    const t = (await u.rpc("create_tenant", { p_name: "Clerk salon", p_slug: `clerk-${ts}`, p_city: "Pune", p_state: "Maharashtra", p_state_code: "27", p_gstin: null, p_address: "", p_phone: "", p_description: "" })).data as string;
+    const again = await db.rpc("clerk_bridge_user", { p_email: email.toUpperCase(), p_password: p2, p_name: "" });
+    assert.ifError(again.error);
+    assert.equal(again.data, first.data, "an existing owner keeps the same user id");
+    assert.ok((await mk().auth.signInWithPassword({ email, password: p1 })).error, "the earlier password stops working");
+    const u2 = mk();
+    assert.ifError((await u2.auth.signInWithPassword({ email, password: p2 })).error);
+    assert.equal((await u2.from("tenants").select("id").eq("id", t)).data!.length, 1, "and keeps their salon");
+    assert.equal((await db.rpc("clerk_bridge_user", { p_email: email, p_password: p2, p_name: "" })).data, first.data, "the same password again changes nothing");
+    assert.ifError((await mk().auth.signInWithPassword({ email, password: p2 })).error);
+    assert.match((await db.rpc("clerk_bridge_user", { p_email: process.env.AGENT_BOT_EMAIL!, p_password: p2, p_name: "x" })).error?.message ?? "", /not allowed/, "never the agent service account");
+    assert.match((await db.rpc("clerk_bridge_user", { p_email: email, p_password: "short", p_name: "x" })).error?.message ?? "", /too short/);
+    assert.match((await u2.rpc("clerk_bridge_user", { p_email: `x2-${ts}@salonmind.test`, p_password: p2, p_name: "x" })).error?.message ?? "", /forbidden/, "owners cannot use it");
+    const del = await u2.rpc("delete_my_account");
+    assert.ifError(del.error);
+    assert.equal((await db.from("tenants").select("id").eq("id", t)).data!.length, 0);
+  });
 });

@@ -19,7 +19,7 @@ vector DB, unified LLM abstraction, Indian languages, low-bandwidth mobile, AES-
 | Web app + API ("microservices") | **Next.js 15 App Router** on **Vercel Hobby** (region `bom1` Mumbai) | Server Components = tiny JS for 4G; route handlers & server actions are serverless functions that scale to zero and burst on Diwali spikes |
 | Relational DB | **Supabase Postgres** (free, `ap-south-1` Mumbai) | Transactional billing/tenant data, RLS for isolation |
 | Vector DB | **pgvector** in the same Postgres | Service embeddings for AI search — no extra vendor |
-| Auth | **Supabase Auth** (email/password) | JWT → `auth.uid()` inside RLS policies |
+| Auth | **Supabase Auth**; log in / sign up with a one-time **email code from Clerk** (free Hobby plan) when its keys are set, else email/password | Clerk proves the email; `/auth/clerk` opens the matching Supabase session (`clerk_bridge_user`), so the JWT → `auth.uid()` inside RLS policies is unchanged |
 | LLMs | **Groq** (Llama 3.3 70B, Llama 4 Scout vision) → **Gemini 2.5 Flash** → **OpenRouter `:free`** → **Hugging Face router** → **Ollama (local)** → **rules engine** | Unified abstraction (`src/lib/ai/llm.ts`) with automatic fallback; the app is fully functional with *zero* keys |
 | Embeddings | **Gemini `gemini-embedding-001` @768d** or local feature-hashing embedder | Local embedder keeps vector search working with no key |
 | Scheduler / cron | **Supabase `pg_cron` + `pg_net`** (every 30 min) + **Vercel Cron** (daily backup) | Drives the autonomous orchestrator tick |
