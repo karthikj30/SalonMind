@@ -581,3 +581,11 @@ test("Profit & loss: revenue is net of GST, minus stock at cost, payroll and exp
   assert.deepEqual({ r: p.revenue, ps: p.productSales, g: p.grossProfit, e: p.expenses, n: p.net, m: p.margin }, { r: 15000, ps: 1000, g: 13800, e: 5800, n: 2000, m: 13.3 });
   assert.deepEqual(p.expensesByCategory[0], { category: "rent", amount: 5000 });
 });
+
+import { inr } from "../src/lib/time.ts";
+test("inr never prints a negative zero", () => {
+  assert.equal(inr(-0), "₹0");
+  assert.equal(inr(-(0)), "₹0");
+  assert.equal(inr(1234.5), "₹1,234.5");
+  assert.equal(inr(-160), "₹-160");
+});

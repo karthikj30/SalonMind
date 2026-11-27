@@ -662,6 +662,7 @@ export const UI_SOURCE: readonly string[] = [
   "Sessions left",
   "Set up your salon",
   "Settings",
+  "Shampoo, hair oil 5%; hair dye, most cosmetics 18% (since 22 Sep 2025)",
   "Shift",
   "Shift end",
   "Shift start",

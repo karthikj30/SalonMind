@@ -52,7 +52,8 @@ export function daysBetween(a: Date | string, b: Date | string): number {
 }
 
 export const inr = (n: number | string | null | undefined) =>
-  "₹" + Number(n ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+  // `|| 0` turns -0 (e.g. a negated zero expense) into 0, so it never prints as "₹-0"
+  "₹" + (Number(n ?? 0) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
 /** Indian festival / wedding-season demand calendar (2026–2027). Multiplier feeds pricing + inventory forecasts. */
 export const FESTIVALS: { name: string; from: string; to: string; demand: number }[] = [

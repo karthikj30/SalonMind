@@ -62,7 +62,7 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
               </div>
               <div className="rounded-xl bg-ivory-100 p-3">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-900/50">By payment mode</p>
-                <ul className="mt-1 space-y-0.5 text-sm">{dc.methods.map((m) => <li key={m.method} className="flex justify-between"><span className="capitalize">{m.method} <span className="text-xs text-brand-900/45">×{m.count}</span></span><b>{inr(m.total)}</b></li>)}</ul>
+                <ul className="mt-1 space-y-0.5 text-sm">{dc.methods.map((m) => <li key={m.method} className="flex justify-between"><span className="capitalize">{m.method === "upi" ? "UPI" : m.method} <span className="text-xs text-brand-900/45">×{m.count}</span></span><b>{inr(m.total)}</b></li>)}</ul>
                 <p className="mt-2 rounded-lg bg-gold-100 px-2 py-1 text-xs text-brand-900">Cash to count in the drawer: <b>{inr(dc.cashToCount)}</b></p>
               </div>
               <div className="rounded-xl bg-ivory-100 p-3">
