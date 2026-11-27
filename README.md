@@ -105,6 +105,8 @@ CSV client import, stylist calendar (ICS) feeds and a face-shape style advisor.
   stylist's first clock-in, approved leave never deducted) and shows late marks.
 * **Expenses and profit & loss** — record rent, electricity, supplies…; Billing shows the month's real profit:
   revenue without GST, minus stock at cost, staff cost and expenses.
+* **GST** — salon services are invoiced at 5% without input tax credit (mandatory since 22 Sep 2025); retail
+  products at their own HSN rate. Stock credit shared between services and retail is reversed by turnover (Rule 42).
 
 **Prepaid value and self-service (latest):**
 

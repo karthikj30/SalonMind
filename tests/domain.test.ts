@@ -35,6 +35,20 @@ test("GST: GSTR-3B uses ITC (IGST first) and computes cash payable", () => {
   assert.equal(r.gstr1.docs.count, 1);
 });
 
+test("GST: salon services at 5% without ITC → common credit reversed by turnover (Rule 42)", () => {
+  // ₹8,000 of services at 5% + ₹2,000 of retail products at 18%; ₹1,000 of IGST paid on stock
+  const inv = computeInvoice([
+    { description: "Colour", kind: "service", code: "999721", qty: 1, rate: 5, unit_price: 8000 },
+    { description: "Shampoo", kind: "product", code: "3305", qty: 1, rate: 18, unit_price: 2000 },
+  ], "27", "27");
+  assert.equal(inv.cgst, 380); assert.equal(inv.sgst, 380); assert.equal(inv.total, 10760);
+  const r = buildReturns([{ number: "A/2", invoice_date: "2026-11-02", place_of_supply: "27", ...inv }] as never, [{ subtotal: 5555.56, gst_amount: 1000, is_interstate: true }]);
+  assert.equal(r.gstr3b.itc_reversed.igst, 800); // 80% of turnover is no-ITC services
+  assert.equal(r.gstr3b.itc_available.igst, 200);
+  assert.equal(r.gstr3b.tax_payable_cash.cgst, 180); // 380 output CGST − 200 IGST credit
+  assert.equal(r.gstr3b.tax_payable_cash.sgst, 380);
+});
+
 test("Split payout routes booth-renter share and tax bucket", () => {
   const sp = splitPayout({ taxable_value: 1000, cgst: 90, sgst: 90, igst: 0, total: 1180 }, "upi", { name: "Asha", booth_rent_pct: 30 });
   assert.equal(sp.tax_bucket, 180); assert.equal(sp.gateway_fee, 0);
@@ -265,7 +279,15 @@ test("Marketplace queries in Indian languages parse without an LLM", () => {
   }
 });
 
-import { asciiDigits, isNo as langNo, isYes as langYes } from "../src/lib/i18n/concierge.ts";
+import { asciiDigits, confirmLine, isNo as langNo, isYes as langYes } from "../src/lib/i18n/concierge.ts";
+
+test("concierge: a proposal reply that left out YES gets the confirm line in the reply's script", () => {
+  // Hinglish (Latin letters) gets the English line; a native-script reply gets that language's line
+  assert.equal(confirmLine("Kal 11 baje Men's haircut Ravi ke saath, ₹600 + GST 😊", "hi"), "Reply YES to confirm or NO to change.");
+  assert.match(confirmLine("कल 11 बजे हेयरकट उपलब्ध है", "hi"), /YES/);
+  assert.match(confirmLine("कल 11 बजे हेयरकट उपलब्ध है", "hi"), /हाँ/);
+  for (const l of ["ta", "te", "bn", "mr", "gu", "kn", "ml", "pa", "or", "ur", "as"]) assert.match(confirmLine("நாளை", l), /YES/, l);
+});
 import { dict, isRtl, UI_LANGS } from "../src/lib/i18n/ui.ts";
 
 test("13 languages: booking request in every new script is understood (day, time, intent, language)", () => {

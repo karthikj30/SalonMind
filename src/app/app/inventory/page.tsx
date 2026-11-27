@@ -50,7 +50,7 @@ export default async function Inventory({ searchParams }: { searchParams: Promis
             <Field label="Reorder level"><Input name="reorder_level" type="number" step="0.1" required /></Field>
             <Field label="Unit cost ₹"><Input name="unit_cost" type="number" step="0.01" required /></Field>
             <Field label="Retail price ₹"><Input name="retail_price" type="number" step="0.01" /></Field>
-            <Field label="GST %"><Select name="gst_rate" defaultValue="18">{[0, 5, 12, 18, 28].map((r) => <option key={r} value={r}>{r}%</option>)}</Select></Field>
+            <Field label="GST %" hint="Shampoo, hair oil 5%; hair dye, most cosmetics 18% (since 22 Sep 2025)"><Select name="gst_rate" defaultValue="18">{[0, 5, 12, 18, 28].map((r) => <option key={r} value={r}>{r}%</option>)}</Select></Field>
             <Field label="HSN"><Input name="hsn" defaultValue="3305" /></Field>
             <Field label="Lead time (days)"><Input name="lead_time_days" type="number" defaultValue={3} /></Field>
             <div className="col-span-2"><SubmitButton>Add product</SubmitButton></div>

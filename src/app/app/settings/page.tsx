@@ -19,7 +19,7 @@ const PARAMS: [string, string, string][] = [
   ["deposit_pct", "Deposit %", "Of the booking price"],
   ["reorder_buffer_days", "Reorder safety buffer (days)", "Added to vendor lead time"],
   ["retention_grace_days", "Retention grace (days)", "Overdue days beyond the client's cycle before an offer"],
-  ["gst_rate", "GST on services %", "18% for salon services"],
+  ["gst_rate", "GST on services %", "5% for salon services since 22 Sep 2025 (no input tax credit)"],
   ["loyalty_points_per_100", "Loyalty points per ₹100", "1 point = ₹1 at redemption"],
   ["loyalty_max_redeem_pct", "Max points redemption %", "Of a bill"],
   ["referral_bonus_points", "Referral bonus points", "Credited to the referrer after the friend's first visit"],

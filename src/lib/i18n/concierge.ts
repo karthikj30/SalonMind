@@ -21,7 +21,7 @@ const T: Record<Lang, Record<Key, string>> = {
     handoff: "I'm sorry about this. A team member is taking over this chat and our manager will call you back within 2 hours.",
     slots: "Open slots for {service} on {date}: {list}. Reply with a time to book.",
     noSlots: "No open slots for {service} on {date}. Try another day?",
-    price: "{service} costs {price} (+18% GST), {mins} minutes.",
+    price: "{service} costs {price} (+{gst}% GST), {mins} minutes.",
     cancelled: "✅ Cancelled your booking on {when}.",
     notAvailable: "{time} is not available for {service}.",
     noBooking: "I couldn't find an upcoming booking to cancel.",
@@ -35,7 +35,7 @@ const T: Record<Lang, Record<Key, string>> = {
     handoff: "असुविधा के लिए खेद है। हमारी टीम का एक सदस्य अब यह चैट संभालेगा और मैनेजर 2 घंटे में आपको कॉल करेंगे।",
     slots: "{date} को {service} के लिए खाली समय: {list}। बुक करने के लिए समय बताइए।",
     noSlots: "{date} को {service} के लिए कोई समय खाली नहीं है। कोई दूसरा दिन बताइए।",
-    price: "{service}: {price} (+18% GST), {mins} मिनट।",
+    price: "{service}: {price} (+{gst}% GST), {mins} मिनट।",
     cancelled: "✅ आपकी {when} की बुकिंग रद्द कर दी गई है।",
     notAvailable: "{time} पर {service} उपलब्ध नहीं है।",
     noBooking: "रद्द करने के लिए कोई आने वाली बुकिंग नहीं मिली।",
@@ -49,7 +49,7 @@ const T: Record<Lang, Record<Key, string>> = {
     handoff: "गैरसोयीबद्दल क्षमस्व. आमच्या टीमचा सदस्य आता ही चॅट हाताळेल आणि मॅनेजर 2 तासांत तुम्हाला कॉल करतील.",
     slots: "{date} रोजी {service} साठी उपलब्ध वेळा: {list}. बुक करण्यासाठी वेळ सांगा.",
     noSlots: "{date} रोजी {service} साठी वेळ उपलब्ध नाही. दुसरा दिवस सांगा.",
-    price: "{service}: {price} (+18% GST), {mins} मिनिटे.",
+    price: "{service}: {price} (+{gst}% GST), {mins} मिनिटे.",
     cancelled: "✅ तुमचे {when} चे बुकिंग रद्द केले आहे.",
     notAvailable: "{time} ला {service} उपलब्ध नाही.",
     noBooking: "रद्द करण्यासाठी कोणतेही आगामी बुकिंग सापडले नाही.",
@@ -63,7 +63,7 @@ const T: Record<Lang, Record<Key, string>> = {
     handoff: "சிரமத்திற்கு வருந்துகிறோம். எங்கள் குழு உறுப்பினர் இந்த உரையாடலைத் தொடர்வார்; மேலாளர் 2 மணி நேரத்திற்குள் உங்களை அழைப்பார்.",
     slots: "{date} அன்று {service}-க்கு காலியான நேரங்கள்: {list}. முன்பதிவு செய்ய நேரத்தைச் சொல்லுங்கள்.",
     noSlots: "{date} அன்று {service}-க்கு நேரம் காலியில்லை. வேறு நாளைச் சொல்லுங்கள்.",
-    price: "{service}: {price} (+18% GST), {mins} நிமிடங்கள்.",
+    price: "{service}: {price} (+{gst}% GST), {mins} நிமிடங்கள்.",
     cancelled: "✅ உங்கள் {when} முன்பதிவு ரத்து செய்யப்பட்டது.",
     notAvailable: "{time}-க்கு {service} கிடைக்கவில்லை.",
     noBooking: "ரத்து செய்ய வரவிருக்கும் முன்பதிவு எதுவும் இல்லை.",
@@ -77,7 +77,7 @@ const T: Record<Lang, Record<Key, string>> = {
     handoff: "అసౌకర్యానికి క్షమించండి. మా బృంద సభ్యులు ఇప్పుడు ఈ చాట్‌ను చూసుకుంటారు; మేనేజర్ 2 గంటల్లో మీకు కాల్ చేస్తారు.",
     slots: "{date}న {service}కి ఖాళీ సమయాలు: {list}. బుక్ చేయడానికి సమయం చెప్పండి.",
     noSlots: "{date}న {service}కి ఖాళీ సమయం లేదు. మరో రోజు చెప్పండి.",
-    price: "{service}: {price} (+18% GST), {mins} నిమిషాలు.",
+    price: "{service}: {price} (+{gst}% GST), {mins} నిమిషాలు.",
     cancelled: "✅ మీ {when} బుకింగ్ రద్దు చేయబడింది.",
     notAvailable: "{time}కి {service} అందుబాటులో లేదు.",
     noBooking: "రద్దు చేయడానికి రాబోయే బుకింగ్ ఏదీ కనిపించలేదు.",
@@ -91,7 +91,7 @@ const T: Record<Lang, Record<Key, string>> = {
     handoff: "অসুবিধার জন্য দুঃখিত। আমাদের টিমের একজন সদস্য এখন এই চ্যাটটি দেখবেন এবং ম্যানেজার ২ ঘণ্টার মধ্যে আপনাকে ফোন করবেন।",
     slots: "{date} তারিখে {service}-এর জন্য খালি সময়: {list}। বুক করতে সময় জানান।",
     noSlots: "{date} তারিখে {service}-এর জন্য কোনো সময় খালি নেই। অন্য দিন জানান।",
-    price: "{service}: {price} (+18% GST), {mins} মিনিট।",
+    price: "{service}: {price} (+{gst}% GST), {mins} মিনিট।",
     cancelled: "✅ আপনার {when}-এর বুকিং বাতিল করা হয়েছে।",
     notAvailable: "{time}-এ {service} পাওয়া যাচ্ছে না।",
     noBooking: "বাতিল করার মতো কোনো আসন্ন বুকিং পাওয়া যায়নি।",
@@ -102,6 +102,15 @@ const T: Record<Lang, Record<Key, string>> = {
 export function reply(lang: string | null | undefined, key: Key, vars: Record<string, string | number> = {}) {
   const l = (REPLY_LANGS as string[]).includes(lang ?? "") ? (lang as Lang) : "en";
   return T[l][key].replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ""));
+}
+
+/**
+ * The "reply YES to confirm or NO to change" line of a booking proposal, for a reply that left it out:
+ * in English when the reply is written in Latin letters (English, Hinglish), else in the reply's language.
+ */
+export function confirmLine(replyText: string, lang: string | null | undefined) {
+  const latin = !/[^\u0000-\u024f\s\p{P}\p{S}\p{N}]/u.test(replyText);
+  return reply(latin ? "en" : lang, "proposal").split("\n").pop()!;
 }
 
 /**

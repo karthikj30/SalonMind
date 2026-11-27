@@ -4,7 +4,7 @@ import type { AgentDef, Tenant } from "./types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { churnRisk, lexiconSentiment, visitCycle } from "../domain/crm";
 import { daysToBirthday } from "../domain/loyalty";
-import { detectLang, isNo as i18nIsNo, isYes as i18nIsYes, matchService, reply as tr, REPLY_LANGS, ruleIntent as i18nRuleIntent } from "../i18n/concierge";
+import { confirmLine, detectLang, isNo as i18nIsNo, isYes as i18nIsYes, matchService, reply as tr, REPLY_LANGS, ruleIntent as i18nRuleIntent } from "../i18n/concierge";
 import { LANGUAGES, llmJson, llmText } from "../ai/llm";
 import { llmTextIn } from "../ai/translate";
 import { sendMessage } from "../services/messaging";
@@ -270,7 +270,7 @@ Return JSON {language: ISO code of the customer's language (en, hi, ta, te, bn, 
         rf.push(plan?.slots.length ? [lng, "slots", { service: svc.name, date, list: plan.slots.map((s) => `${toIst(s.start).time} (${s.staff.name}, ${inr(s.quote.price)})`).join(", ") }] : [lng, "noSlots", { service: svc.name, date }]);
       }
     }
-    if (it.intent === "price" && svc) { facts.push(`${svc.name} costs ${inr(svc.base_price)} (+18% GST), ${svc.duration_min} minutes.`); rf.push([lng, "price", { service: svc.name, price: inr(svc.base_price), mins: svc.duration_min }]); }
+    if (it.intent === "price" && svc) { facts.push(`${svc.name} costs ${inr(svc.base_price)} (+${tenant.settings.gst_rate}% GST), ${svc.duration_min} minutes.`); rf.push([lng, "price", { service: svc.name, price: inr(svc.base_price), mins: svc.duration_min, gst: tenant.settings.gst_rate }]); }
     if (it.intent === "cancel" && client) {
       const { data: next } = await db.from("bookings").select("id, start_at").eq("client_id", client.id).in("status", ["booked", "confirmed"]).gte("start_at", new Date().toISOString()).order("start_at").limit(1).maybeSingle();
       if (next) {
@@ -291,13 +291,17 @@ Return JSON {language: ISO code of the customer's language (en, hi, ta, te, bn, 
       actions.push({ type: "escalation", label: `⚠ Escalated ${handle} to staff (${escalate})` });
     }
 
-    const reply = await llmText({
-      system: `You are the friendly AI receptionist of ${tenant.name} (${tenant.city ?? ""}), hours ${tenant.open_time.slice(0, 5)}–${tenant.close_time.slice(0, 5)}. Reply on ${msg.channel} in ${lang(it.language)} (use the customer's script). Max 70 words. Use ONLY these facts; never invent prices or slots. Services: ${catalogue}. Facts: ${facts.join(" ") || "none"}. If booking details are missing, ask for the missing service/date/time.`,
+    const proposal = rf.find((a) => a[1] === "proposal");
+    if (client?.name && client.name !== "Guest") facts.push(`The customer's name is ${client.name}; do not ask for it.`);
+    const ai = await llmText({
+      system: `You are the friendly AI receptionist of ${tenant.name} (${tenant.city ?? ""}), hours ${tenant.open_time.slice(0, 5)}–${tenant.close_time.slice(0, 5)}. Reply on ${msg.channel} in ${lang(it.language)} (use the customer's script). Max 70 words. Use ONLY these facts; never invent prices or slots. Services: ${catalogue}. Facts: ${facts.join(" ") || "none"}. ${proposal ? "A PROPOSAL is ready: state it and end by asking the customer to reply YES (write the word YES in Latin letters) to confirm or NO to change. Ask for nothing else." : "If booking details are missing, ask for the missing service/date/time."}`,
       messages: [{ role: "user", content: history || msg.body }],
       temperature: 0.5,
     }, () => rf.length ? rf.map((a) => tr(...a)).join("\n")
       : it.intent === "book" || it.intent === "availability" ? tr(lng, "askDetails")
       : tr(lng, "greeting", { salon: tenant.name, list: (services ?? []).slice(0, 5).map((x) => `${x.name} ${inr(x.base_price)}`).join(", ") }));
+    // A proposal books only on an explicit YES, so the reply must always ask for one, whatever the model wrote
+    const reply = proposal && !/\bYES\b/.test(ai.text) ? { ...ai, text: `${ai.text.trim()}\n${confirmLine(ai.text, proposal[0])}` } : ai;
 
     await sendMessage(db, { tenant_id: tenant.id, client_id: client?.id ?? null, contact_handle: handle, phone: client?.phone, channel: msg.channel, body: reply.text, agent: "concierge", meta: { intent: it.intent, language: reply.provider === "rules-engine" ? lng : it.language } });
     if (client && !msg.client_id) await db.from("messages").update({ client_id: client.id }).eq("id", msg.id);

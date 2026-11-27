@@ -65,8 +65,8 @@ that proves it. Three test layers:
 | Feature | Implementation | Tests |
 |---|---|---|
 | UPI / card / netbanking + split payouts (owner, booth renter, tax bucket) | `billing` agent, `domain/gst.ts splitPayout`, `services/invoicing.ts` | UNIT *Split payout…*; INT *Checkout by booth renter…* |
-| e-invoicing, CGST/SGST/IGST | `computeInvoice`, FY numbering, IRN-format reference | UNIT *GST* (3); INT *Checkout by booth renter…* |
-| ITC reconciliation + monthly return drafts | `gst` agent → GSTR-1 / GSTR-3B | UNIT *GSTR-3B uses ITC…*; INT *ITC: inter-state PO received…* |
+| e-invoicing, CGST/SGST/IGST; salon services at 5% without ITC (mandatory since 22 Sep 2025, migration 0014), retail products at their own HSN rate | `computeInvoice`, `SALON_SERVICE_GST`, FY numbering, IRN-format reference | UNIT *GST* (4); INT *Checkout by booth renter…* (5% service + 18% product lines) |
+| ITC reconciliation + monthly return drafts; common credit used for 5% no-ITC services reversed by turnover (CGST Rule 42, GSTR-3B 4(B)) | `gst` agent → GSTR-1 / GSTR-3B | UNIT *GSTR-3B uses ITC…*, *salon services at 5% without ITC…*; INT *ITC: inter-state PO received…* |
 
 ## §4 Technical & cloud specifications — what the PDF names vs. what is built
 

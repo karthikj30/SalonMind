@@ -187,7 +187,11 @@ describe("Module 6 + loyalty — POS, split payouts, GST, memberships, wallet, p
     const { data: inv } = await db.from("invoices").select("*").eq("booking_id", r.booking.id).single();
     assert.ok(inv, "invoice issued");
     assert.equal(Number(inv!.igst), 0); assert.equal(Number(inv!.cgst), Number(inv!.sgst));
-    assert.equal(Number(inv!.cgst) + Number(inv!.sgst), Math.round(Number(inv!.taxable_value) * 0.18 * 100) / 100);
+    // each line at its own rate: the service at the salon's 5%, the serum at its product rate (18%)
+    const lines = inv!.items as { kind: string; rate: number; taxable_value: number; cgst: number; sgst: number }[];
+    assert.ok(lines.some((l) => l.kind === "service" && l.rate === 5), "salon service billed at 5% GST");
+    assert.ok(lines.some((l) => l.kind === "product" && l.rate === 18), "retail product billed at its own rate");
+    assert.ok(Math.abs(Number(inv!.cgst) + Number(inv!.sgst) - lines.reduce((a, l) => a + (l.taxable_value * l.rate) / 100, 0)) < 0.05);
     assert.match(inv!.number, /^ITSA\/\d{4}-\d{2}\/\d{4}$/);
     assert.ok(inv!.irn && inv!.irn.length === 64);
     assert.ok(inv!.splits.booth_renter.amount > 0 && inv!.splits.gateway_fee > 0, "booth renter share + card fee");
@@ -417,7 +421,10 @@ describe("Module 1 — procurement, negotiation, waste", () => {
     await emit(db, tenant.id, "gst.prepare", { period: today.slice(0, 7) }, "test");
     await processEvents(db, tenant);
     const { data: g } = await db.from("gst_returns").select("*").eq("tenant_id", tenant.id).eq("period", today.slice(0, 7)).single();
-    assert.equal(g!.gstr3b.itc_available.igst, 540);
+    // Rule 42: the share of the IGST credit used for 5% no-ITC services is reversed; the rest is available
+    const r3b = g!.gstr3b;
+    assert.ok(r3b.itc_reversed.igst > 0 && r3b.itc_available.igst > 0, JSON.stringify(r3b));
+    assert.ok(Math.abs(r3b.itc_available.igst + r3b.itc_reversed.igst - 540) < 0.05, "available + reversed = IGST paid");
     assert.ok(g!.gstr1.docs.count >= 3);
     assert.ok(g!.gstr1.hsn.some((h: { code: string }) => h.code === "999721"));
   });
@@ -521,7 +528,7 @@ describe("Multilingual conversational AI (RFP §4) — rules engine, no API key"
     await receiveMessage(db, tenant.id, { channel: "instagram", handle: h, body: "फेशियल कितने का है?" });
     await processEvents(db, tenant);
     const body = (await db.from("messages").select("body").eq("contact_handle", h).eq("direction", "out").single()).data!.body;
-    assert.match(body, /Classic facial: ₹900 \(\+18% GST\), 60 मिनट/);
+    assert.match(body, new RegExp(`Classic facial: ₹900 \\(\\+${tenant.settings.gst_rate}% GST\\), 60 मिनट`));
   });
 });
 

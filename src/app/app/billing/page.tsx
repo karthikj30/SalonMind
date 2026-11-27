@@ -8,7 +8,7 @@ import { addDays, fmtDate, inr, istDate, todayIst } from "@/lib/time";
 import { summariseDay, type CloseInvoice } from "@/lib/domain/dayclose";
 import { stateName } from "@/lib/states";
 
-type R3b = { outward_taxable: Record<string, number>; itc_available: Record<string, number>; tax_payable_cash: Record<string, number>; credit_carried_forward: Record<string, number> };
+type R3b = { outward_taxable: Record<string, number>; itc_available: Record<string, number>; itc_reversed?: Record<string, number>; tax_payable_cash: Record<string, number>; credit_carried_forward: Record<string, number> };
 
 export default async function Billing({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const sp = await searchParams;
@@ -132,7 +132,7 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
               <table className="w-full text-xs">
                 <thead><tr className="text-brand-900/55"><th className="text-left">GSTR-3B</th><th>CGST</th><th>SGST</th><th>IGST</th></tr></thead>
                 <tbody>
-                  {([["3.1(a) Output tax", g.outward_taxable], ["4(A) ITC available", g.itc_available], ["Payable in cash", g.tax_payable_cash], ["Credit c/f", g.credit_carried_forward]] as const).map(([l, r]) => (
+                  {([["3.1(a) Output tax", g.outward_taxable], ["4(A) ITC available", g.itc_available], ...(g.itc_reversed ? [["4(B) ITC reversed, Rule 42", g.itc_reversed] as const] : []), ["Payable in cash", g.tax_payable_cash], ["Credit c/f", g.credit_carried_forward]] as const).map(([l, r]) => (
                     <tr key={l} className="border-t"><td className="py-1">{l}</td><td className="text-center">{inr(r.cgst)}</td><td className="text-center">{inr(r.sgst)}</td><td className="text-center">{inr(r.igst)}</td></tr>
                   ))}
                 </tbody>

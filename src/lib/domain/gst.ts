@@ -1,10 +1,17 @@
 /**
  * GST engine for Indian salons.
- * - Salon services: SAC 999721/999722, 18% GST. Place of supply for services needing physical presence
- *   is where the service is performed (IGST Act s.12(3)/13(3)) → normally intra-state → CGST + SGST.
- * - Retail products: HSN-based rate (default 18%).
- * - Procurement from another state → IGST input tax credit.
+ * - Salon services ("beauty and physical well-being", SAC 9997): 5% GST without input tax credit, mandatory
+ *   from 22 Sep 2025 (56th GST Council meeting; CBIC notification 15/2025-CT(Rate)). Before that: 18% with ITC.
+ *   Place of supply for services needing physical presence is where the service is performed
+ *   (IGST Act s.12(3)/13(3)) → normally intra-state → CGST + SGST.
+ * - Retail products: their own HSN rate, with ITC.
+ * - Procurement from another state → IGST input tax credit. Stock bought for both services and retail is
+ *   common credit: the share used for 5% no-ITC services is reversed by turnover (CGST Rule 42).
  */
+export const SALON_SERVICE_GST = 5;
+
+/** A 5% (or lower) service line is a supply on which input tax credit may not be taken. */
+const withoutItc = (it: { kind: string; rate: number }) => it.kind === "service" && it.rate <= SALON_SERVICE_GST;
 export type TaxLine = { description: string; kind: "service" | "product"; code: string; qty: number; rate: number; unit_price: number; staff_id?: string | null; product_id?: string | null };
 
 export function splitTax(taxable: number, ratePct: number, interstate: boolean) {
@@ -85,14 +92,19 @@ export function buildReturns(invoices: Inv[], receivedPOs: Po[]) {
   }
   const nums = invoices.map((i) => i.number).sort();
   const out = invoices.reduce((a, i) => ({ taxable: a.taxable + i.taxable_value, cgst: a.cgst + i.cgst, sgst: a.sgst + i.sgst, igst: a.igst + i.igst }), { taxable: 0, cgst: 0, sgst: 0, igst: 0 });
-  const itc = receivedPOs.reduce((a, p) => {
+  const paid = receivedPOs.reduce((a, p) => {
     if (p.is_interstate) a.igst += p.gst_amount; else { a.cgst += p.gst_amount / 2; a.sgst += p.gst_amount / 2; }
     a.taxable += p.subtotal; return a;
   }, { taxable: 0, cgst: 0, sgst: 0, igst: 0 });
+  // Rule 42: common credit × (turnover on which ITC is not allowed ÷ total turnover) is reversed
+  const noItcTurnover = invoices.reduce((a, i) => a + i.items.filter(withoutItc).reduce((b, it) => b + it.taxable_value, 0), 0);
+  const share = out.taxable > 0 ? noItcTurnover / out.taxable : 0;
+  const reversed = { cgst: paid.cgst * share, sgst: paid.sgst * share, igst: paid.igst * share };
+  const itc = { taxable: paid.taxable, cgst: paid.cgst - reversed.cgst, sgst: paid.sgst - reversed.sgst, igst: paid.igst - reversed.igst };
 
   // ITC utilisation order (s.49 CGST Act, simplified): IGST credit → IGST, CGST, SGST; CGST → CGST, IGST; SGST → SGST, IGST
   const liab = { igst: out.igst, cgst: out.cgst, sgst: out.sgst };
-  const credit = { ...itc };
+  const credit = { cgst: itc.cgst, sgst: itc.sgst, igst: itc.igst };
   const use = (from: "igst" | "cgst" | "sgst", to: "igst" | "cgst" | "sgst") => {
     const x = Math.min(credit[from], liab[to]); credit[from] -= x; liab[to] -= x;
   };
@@ -109,6 +121,7 @@ export function buildReturns(invoices: Inv[], receivedPOs: Po[]) {
     gstr3b: {
       outward_taxable: r(out),
       itc_available: r(itc),
+      itc_reversed: r(reversed),
       tax_payable_cash: r(liab),
       credit_carried_forward: r(credit),
     },
