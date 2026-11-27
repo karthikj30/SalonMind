@@ -22,6 +22,11 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
     try { p = (localStorage.getItem("theme") as Pref) || "system"; } catch { /* storage blocked */ }
     setPref(p);
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    // Re-assert the saved theme on mount: if React ever has to rebuild the page on the client, it resets
+    // <html class> to the server's value, which knows nothing of the theme the pre-paint script set.
+    const isDark = p === "dark" || (p === "system" && mq.matches);
+    document.documentElement.classList.toggle("dark", isDark);
+    document.documentElement.classList.toggle("light", !isDark);
     const onChange = () => { let cur: Pref = "system"; try { cur = (localStorage.getItem("theme") as Pref) || "system"; } catch { /* */ } if (cur === "system") apply("system"); };
     mq.addEventListener("change", onChange);
     // the Voice Agent / command palette can switch the theme too
