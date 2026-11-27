@@ -16,6 +16,7 @@ on free tiers**.
 * **Manual test script:** [`docs/TESTING.md`](docs/TESTING.md)
 * **Proposal (timeline, costs, token projections):** [`docs/PROPOSAL.md`](docs/PROPOSAL.md)
 * **RFP → code → test traceability:** [`docs/RFP_COVERAGE.md`](docs/RFP_COVERAGE.md) · **market research:** [`docs/RESEARCH.md`](docs/RESEARCH.md)
+* **Seed pitch deck (15 slides, $5M ask, every figure sourced):** [`docs/pitch/SalonMind-Seed-Pitch.pptx`](docs/pitch/SalonMind-Seed-Pitch.pptx)
 
 ## Look & feel
 
