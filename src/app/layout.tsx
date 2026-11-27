@@ -17,8 +17,13 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${sans.variable} ${display.variable}`} suppressHydrationWarning>
-      <head><script dangerouslySetInnerHTML={{ __html: themeScript }} /></head>
-      <body className="min-h-screen font-sans">{children}</body>
+      {/* No hand-written <head>: Next.js and React put the metadata there themselves. Rendering our own
+          <head> made React lose its place between <head> and <body> on some loads (hydration error 418).
+          The theme script runs first thing in <body>, still before anything is painted. */}
+      <body className="min-h-screen font-sans">
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        {children}
+      </body>
     </html>
   );
 }
