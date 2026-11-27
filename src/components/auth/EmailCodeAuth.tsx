@@ -1,7 +1,6 @@
 "use client";
-import { ClerkProvider, useClerk } from "@clerk/nextjs";
+import { ClerkProvider, useClerk, useSignIn, useSignUp } from "@clerk/nextjs";
 import { isClerkAPIResponseError } from "@clerk/nextjs/errors";
-import { useSignIn, useSignUp } from "@clerk/nextjs/legacy";
 import { Loader2, Mail, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Field, Input } from "@/components/ui";
@@ -26,15 +25,17 @@ function randomPassword(): string {
 
 function messageOf(e: unknown): string {
   if (isClerkAPIResponseError(e)) return e.errors[0]?.longMessage ?? e.errors[0]?.message ?? "Something went wrong.";
-  return (e as Error)?.message || "Something went wrong.";
+  return (e as { longMessage?: string })?.longMessage || (e as Error)?.message || "Something went wrong.";
 }
 
-const hasCode = (e: unknown, ...codes: string[]) => isClerkAPIResponseError(e) && e.errors.some((x) => codes.includes(x.code));
+/** Clerk error codes, from an API error (several) or a plain Clerk error (one). */
+const codesOf = (e: unknown): string[] => (isClerkAPIResponseError(e) ? e.errors.map((x) => x.code) : typeof (e as { code?: unknown })?.code === "string" ? [(e as { code: string }).code] : []);
 
 function EmailCodeForm({ mode }: { mode: Mode }) {
   const clerk = useClerk();
-  const { isLoaded: signInReady, signIn, setActive } = useSignIn();
-  const { isLoaded: signUpReady, signUp } = useSignUp();
+  // Clerk's current custom-flow API: its calls also run Clerk's bot check (Protect) in a modal when needed
+  const { signIn } = useSignIn();
+  const { signUp } = useSignUp();
   const [step, setStep] = useState<"email" | "code" | "opening">("email");
   const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
   const [email, setEmail] = useState("");
@@ -44,7 +45,7 @@ function EmailCodeForm({ mode }: { mode: Mode }) {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const codeInput = useRef<HTMLInputElement>(null);
-  const ready = signInReady && signUpReady && !!signIn && !!signUp && !!setActive;
+  const ready = clerk.loaded;
 
   // Every log in starts fresh: a Clerk session left in this browser never opens a salon by itself
   useEffect(() => {
@@ -63,22 +64,16 @@ function EmailCodeForm({ mode }: { mode: Mode }) {
     setInfo(null);
     const address = email.trim().toLowerCase();
     try {
-      try {
-        const attempt = await signIn.create({ identifier: address });
-        const factor = attempt.supportedFirstFactors?.find((f) => f.strategy === "email_code");
-        if (!factor || !("emailAddressId" in factor)) throw new Error("Email codes are switched off for log in. Turn on \"Email verification code\" in the Clerk dashboard.");
-        await attempt.prepareFirstFactor({ strategy: "email_code", emailAddressId: factor.emailAddressId });
-        setFlow("signIn");
-      } catch (err) {
-        if (!hasCode(err, "form_identifier_not_found")) throw err;
+      const sent = await signIn.emailCode.sendCode({ emailAddress: address });
+      if (!sent.error) setFlow("signIn");
+      else {
+        if (!codesOf(sent.error).includes("form_identifier_not_found")) throw sent.error;
         // A new email: register it, with the same code step
-        try {
-          await signUp.create({ emailAddress: address, password: randomPassword() });
-        } catch (err2) {
-          if (!hasCode(err2, "form_param_unknown", "form_param_not_allowed")) throw err2;
-          await signUp.create({ emailAddress: address });
-        }
-        await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
+        let created = await signUp.create({ emailAddress: address, password: randomPassword() });
+        if (created.error && codesOf(created.error).some((c) => c === "form_param_unknown" || c === "form_param_not_allowed")) created = await signUp.create({ emailAddress: address });
+        if (created.error) throw created.error;
+        const mailed = await signUp.verifications.sendEmailCode();
+        if (mailed.error) throw mailed.error;
         setFlow("signUp");
       }
       setCode("");
@@ -97,17 +92,19 @@ function EmailCodeForm({ mode }: { mode: Mode }) {
     setBusy(true);
     setError(null);
     try {
-      let sessionId: string | null = null;
       if (flow === "signIn") {
-        const res = await signIn.attemptFirstFactor({ strategy: "email_code", code: code.trim() });
-        if (res.status !== "complete") throw new Error("This account needs another sign-in step that SalonMind does not support. Turn it off in the Clerk dashboard.");
-        sessionId = res.createdSessionId;
+        const checked = await signIn.emailCode.verifyCode({ code: code.trim() });
+        if (checked.error) throw checked.error;
+        if (signIn.status !== "complete") throw new Error("This account needs another sign-in step that SalonMind does not support. Turn it off in the Clerk dashboard.");
+        const done = await signIn.finalize();
+        if (done.error) throw done.error;
       } else {
-        const res = await signUp.attemptEmailAddressVerification({ code: code.trim() });
-        if (res.status !== "complete") throw new Error(`Clerk also asks for: ${res.missingFields.join(", ")}. Turn those off in the Clerk dashboard (User & authentication).`);
-        sessionId = res.createdSessionId;
+        const checked = await signUp.verifications.verifyEmailCode({ code: code.trim() });
+        if (checked.error) throw checked.error;
+        if (signUp.status !== "complete") throw new Error(`Clerk also asks for: ${signUp.missingFields.join(", ")}. Turn those off in the Clerk dashboard (User & authentication).`);
+        const done = await signUp.finalize();
+        if (done.error) throw done.error;
       }
-      await setActive({ session: sessionId });
       setStep("opening");
       const token = await clerk.session?.getToken();
       const res = await fetch("/auth/clerk", {
