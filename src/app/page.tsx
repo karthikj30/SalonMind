@@ -4,6 +4,12 @@ import { ArrowRight, Bot, CalendarClock, MessagesSquare, Package, Receipt, Searc
 import { Logo } from "@/components/Logo";
 import { SalonArt } from "@/components/SalonArt";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { LanguagePicker } from "@/components/LanguagePicker";
+import { UiTranslator } from "@/components/UiTranslator";
+import { getDict } from "@/lib/i18n/server";
+import { isRtl } from "@/lib/i18n/ui";
+import { appDict } from "@/lib/i18n/app";
+import { landingDict } from "@/lib/i18n/landing";
 import { Reveal } from "@/components/Reveal";
 
 const MODULES = [
@@ -26,9 +32,11 @@ const EXTRAS = [
 
 const FACTS = [[Bot, "22 AI agents", "working together"], [Languages, "13 languages", "12 Indian + English, Urdu right-to-left"], [IndianRupee, "₹0 to run", "on free tiers"], [ShieldCheck, "DPDP-ready", "consent, export, erasure"]] as const;
 
-export default function Home() {
+export default async function Home() {
+  const { lang } = await getDict();
   return (
-    <main className="overflow-hidden">
+    <main data-i18n-root data-i18n-wait={lang !== "en" ? "" : undefined} lang={lang} dir={isRtl(lang) ? "rtl" : undefined} className="overflow-hidden">
+      <UiTranslator lang={lang} dict={{ ...appDict(lang), ...landingDict(lang) }} />
       <section className="relative bg-plum-gradient text-white">
         <div className="salon-pattern absolute inset-0 opacity-50" aria-hidden />
         <div className="absolute -left-24 top-1/3 h-80 w-80 rounded-full bg-rose-500/25 blur-3xl" aria-hidden />
@@ -38,6 +46,7 @@ export default function Home() {
             <div className="hidden items-center gap-1 text-sm md:flex">
               <Link href="/marketplace" className="rounded-xl px-3 py-2 text-onplum hover:bg-white/10">Find a salon</Link>
               <Link href="/download" className="rounded-xl px-3 py-2 text-onplum hover:bg-white/10">Get the app</Link>
+              <LanguagePicker value={lang} label="Language" reload className="px-3 py-2 text-onplum hover:bg-white/10" />
               <ThemeToggle className="px-3 py-2 text-onplum" />
               <Link href="/login" className="rounded-xl px-3 py-2 text-onplum hover:bg-white/10">Log in</Link>
               <Link href="/signup" className="rounded-xl bg-champ-400 px-4 py-2 font-medium text-ink hover:bg-champ-300">List your salon</Link>
@@ -51,7 +60,8 @@ export default function Home() {
                   <Link href="/marketplace" className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 hover:bg-brand-50"><Store className="h-4 w-4 text-rose-gold" />Find a salon</Link>
                   <Link href="/download" className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 hover:bg-brand-50"><Smartphone className="h-4 w-4 text-rose-gold" />Get the app</Link>
                   <Link href="/login" className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 hover:bg-brand-50"><LogIn className="h-4 w-4 text-rose-gold" />Log in</Link>
-                  <div className="mt-1 flex items-center justify-between border-t border-brand-100 px-3 pt-2 text-xs text-brand-900/60">Theme<ThemeToggle className="text-brand-800" /></div>
+                  <div className="mt-1 flex items-center justify-between border-t border-brand-100 px-3 pt-2 text-xs text-brand-900/60">Language<LanguagePicker value={lang} label="Language" reload className="text-brand-800" /></div>
+                  <div className="flex items-center justify-between px-3 pt-1 text-xs text-brand-900/60">Theme<ThemeToggle className="text-brand-800" /></div>
                 </nav>
               </details>
             </div>

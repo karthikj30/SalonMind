@@ -20,7 +20,7 @@ export const SOURCES = [
   "src/components/ui.tsx", "src/components/AuthShell.tsx", "src/components/DayCalendar.tsx", "src/components/Widgets.tsx",
   "src/components/VoiceAssistant.tsx", "src/components/CommandPalette.tsx", "src/components/ThemeToggle.tsx",
   "src/components/SubmitButton.tsx", "src/lib/services/metrics.ts", "src/lib/domain/voice.ts",
-  "src/app/download/page.tsx", "src/components/auth/EmailCodeAuth.tsx", "src/components/auth/ClerkAuth.tsx", "src/app/auth/continue/page.tsx", "src/components/AppUpdateBanner.tsx", "src/components/InstallAppButton.tsx", "src/components/GetAppChooser.tsx",
+  "src/app/download/page.tsx", "src/app/page.tsx", "src/components/auth/EmailCodeAuth.tsx", "src/components/auth/ClerkAuth.tsx", "src/app/auth/continue/page.tsx", "src/components/AppUpdateBanner.tsx", "src/components/InstallAppButton.tsx", "src/components/GetAppChooser.tsx",
 ];
 const ATTRS = new Set(["title", "label", "placeholder", "subtitle", "eyebrow", "hint", "pendingText", "aria-label", "empty", "alt"]);
 const PROPS = new Set(["label", "title", "hint"]);
@@ -64,6 +64,8 @@ export function extract() {
       if (ts.isArrayLiteralExpression(n) && n.elements.length >= 2 && strOf(n.elements[0])?.startsWith("/") && strOf(n.elements[1])) add(strOf(n.elements[1]));
       // [value, "Label"] tuples for chips / filters
       if (ts.isArrayLiteralExpression(n) && n.elements.length === 2 && strOf(n.elements[0]) && strOf(n.elements[1]) && /^[a-z_]+$/.test(strOf(n.elements[0]))) add(strOf(n.elements[1]));
+      // [Icon, "Title", "Text"] rows (landing features and facts)
+      if (ts.isArrayLiteralExpression(n) && n.elements.length >= 2 && ts.isIdentifier(n.elements[0]) && /^[A-Z]/.test(n.elements[0].text) && n.elements.slice(1).every((el) => strOf(el))) n.elements.slice(1).forEach((el) => add(strOf(el)));
       if (ts.isPropertyAssignment(n) && PROPS.has(n.name.getText()) && strOf(n.initializer)) add(strOf(n.initializer));
       // flash messages: done("/path", "Saved.") / fail("/path", "…")
       if (ts.isCallExpression(n) && ["done", "fail"].includes(n.expression.getText()) && n.arguments[1] && strOf(n.arguments[1])) add(strOf(n.arguments[1]));

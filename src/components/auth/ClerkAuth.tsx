@@ -12,13 +12,42 @@ type Mode = "login" | "signup";
 /** Clerk's own translations exist for these SalonMind languages; the others see Clerk in English. */
 const LOCALES = { hi: hiIN, bn: bnIN, ta: taIN, te: teIN } as const;
 
-/** Clerk on the log-in, sign-up and continue pages only, in SalonMind's plum. */
+/** SalonMind's dark plum (globals.css .dark) for Clerk's window. */
+const DARK = {
+  colorBackground: "#211423",
+  colorForeground: "#f6eaf3",
+  colorMutedForeground: "#cfb1c8",
+  colorMuted: "#2c1b2e",
+  colorInput: "#1a1019",
+  colorInputForeground: "#f6eaf3",
+  colorNeutral: "#f6eaf3",
+  colorBorder: "#42283f",
+  colorPrimary: "#a2528f",
+  colorPrimaryForeground: "#ffffff",
+};
+
+/** True while the page is dark (ThemeToggle sets the class on <html>). */
+function useDark(): boolean {
+  const [dark, setDark] = useState(false);
+  useEffect(() => {
+    const el = document.documentElement;
+    const update = () => setDark(el.classList.contains("dark"));
+    update();
+    const mo = new MutationObserver(update);
+    mo.observe(el, { attributes: true, attributeFilter: ["class"] });
+    return () => mo.disconnect();
+  }, []);
+  return dark;
+}
+
+/** Clerk on the log-in, sign-up and continue pages only, in SalonMind's plum (light or dark). */
 function Clerk({ lang, children }: { lang: string; children: React.ReactNode }) {
+  const dark = useDark();
   return (
     <ClerkProvider
       publishableKey={CLERK_PUBLISHABLE_KEY}
       localization={LOCALES[lang as keyof typeof LOCALES]}
-      appearance={{ variables: { colorPrimary: "#7e3f75", borderRadius: "0.75rem" } }}
+      appearance={{ variables: { ...(dark ? DARK : { colorPrimary: "#7e3f75" }), borderRadius: "0.75rem" } }}
       signInUrl="/login"
       signUpUrl="/signup"
     >

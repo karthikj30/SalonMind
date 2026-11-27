@@ -7,7 +7,9 @@ const { chromium, devices } = createRequire(import.meta.url)("playwright");
 
 const BASE = process.env.BASE_URL || "http://localhost:3000";
 const ts = Date.now().toString(36);
-const email = `e2e-${ts}@salonmind.test`;
+// With Clerk on, sign-up is by email code: a "+clerk_test" address always receives the code 424242 (Clerk test mode)
+const clerkSecret = process.env.CLERK_SECRET_KEY;
+const email = clerkSecret ? `e2e-${ts}+clerk_test@example.com` : `e2e-${ts}@salonmind.test`;
 const shots = process.env.SHOTS_DIR;
 // SHOTS_VIEWPORT=1 → README-sized screenshots of what is on screen (scrolled to a section) instead of whole pages
 const viewportShots = !!process.env.SHOTS_VIEWPORT;
@@ -20,6 +22,17 @@ const browser = await chromium.launch(sttWav ? { args: ["--use-fake-ui-for-media
 const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
 // the first-visit "get the app" chooser is tested on its own below; the main run behaves like a returning visitor
 await ctx.addInitScript(() => { try { localStorage.setItem("sm_app_choice", "web"); } catch {} });
+if (clerkSecret) {
+  // Clerk's testing token lets an automated run past Clerk's bot check, as Clerk's own Playwright helper does
+  const r = await fetch("https://api.clerk.com/v1/testing_tokens", { method: "POST", headers: { authorization: `Bearer ${clerkSecret}` } });
+  const token = (await r.json()).token;
+  if (!token) throw new Error(`Clerk testing token: HTTP ${r.status}`);
+  await ctx.route(/clerk\.accounts\.dev\/v1\//, (route) => {
+    const u = new URL(route.request().url());
+    u.searchParams.set("__clerk_testing_token", token);
+    route.continue({ url: u.toString() });
+  });
+}
 const page = await ctx.newPage();
 page.setDefaultTimeout(90_000);
 const shot = async (name, at) => {
@@ -63,13 +76,32 @@ try {
   await page.goto(`${BASE}/`); await shot("landing");
   await shot("landing-extras", page.locator("[data-extras]"));
   await page.goto(`${BASE}/signup`);
-  // the Voice Agent fills the sign-up form (never the password — that is typed)
-  log("voice on sign-up:", await voice(`name E2E Owner email ${email}`));
-  if ((await page.inputValue("input[name=name]")) !== "E2E Owner" || (await page.inputValue("input[name=email]")) !== email) throw new Error("voice agent did not fill the sign-up form");
-  if (await page.inputValue("input[name=password]")) throw new Error("voice agent must not touch the password field");
-  await page.fill("input[name=password]", "Test12345!");
-  await Promise.all([page.waitForURL(/onboarding/), page.click("button[type=submit]")]);
-  log("signed up", email);
+  const codeOption = page.getByRole("button", { name: /one-time code by email/ });
+  const clerkOn = await codeOption.waitFor({ timeout: 15_000 }).then(() => true, () => false);
+  if (clerkOn) {
+    // Clerk's window is shown; sign up with the 6-digit email code instead
+    if (!clerkSecret) throw new Error("Clerk is on: run with CLERK_SECRET_KEY so the test can sign up with an email code");
+    await page.locator(".cl-rootBox input[name=emailAddress]").first().waitFor({ timeout: 30_000 }).catch(() => { throw new Error("Clerk's sign-up window is missing"); });
+    await codeOption.click();
+    log("voice on sign-up:", await voice(`name E2E Owner email ${email}`));
+    if ((await page.inputValue("input[name=name]")) !== "E2E Owner" || (await page.inputValue("input[name=email]")) !== email) throw new Error("voice agent did not fill the sign-up form");
+    // Enter submits: the voice assistant's panel stays open over the page after it filled the form
+    await page.locator("input[name=email]").press("Enter");
+    await page.getByText(/We sent a 6-digit code/).waitFor();
+    // exact: the email field's hint also mentions a "6-digit code"
+    const code = page.getByLabel("6-digit code", { exact: true });
+    await code.fill("424242");
+    await Promise.all([page.waitForURL(/onboarding/), code.press("Enter")]);
+    log("signed up with an email code (Clerk)", email);
+  } else {
+    // the Voice Agent fills the sign-up form (never the password — that is typed)
+    log("voice on sign-up:", await voice(`name E2E Owner email ${email}`));
+    if ((await page.inputValue("input[name=name]")) !== "E2E Owner" || (await page.inputValue("input[name=email]")) !== email) throw new Error("voice agent did not fill the sign-up form");
+    if (await page.inputValue("input[name=password]")) throw new Error("voice agent must not touch the password field");
+    await page.fill("input[name=password]", "Test12345!");
+    await Promise.all([page.waitForURL(/onboarding/), page.click("button[type=submit]")]);
+    log("signed up", email);
+  }
   await page.fill("input[name=name]", SALON);
   await page.fill("input[name=city]", "Mumbai");
   await page.fill("input[name=gstin]", "27ABCDE1234F1Z5");
@@ -629,7 +661,18 @@ try {
     try {
       const { createClient } = createRequire(import.meta.url)("@supabase/supabase-js");
       const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, { auth: { persistSession: false } });
-      if (!(await sb.auth.signInWithPassword({ email, password: "Test12345!" })).error) { await sb.rpc("delete_my_account"); console.log("cleaned up test account after failure"); }
+      let password = "Test12345!";
+      if (clerkSecret) {
+        // the Supabase password of a Clerk account is derived on the server (src/app/auth/clerk/route.ts)
+        const H = { authorization: `Bearer ${clerkSecret}` };
+        const users = await (await fetch(`https://api.clerk.com/v1/users?email_address=${encodeURIComponent(email)}`, { headers: H })).json();
+        for (const u of Array.isArray(users) ? users : []) {
+          const { createHmac } = await import("node:crypto");
+          password = createHmac("sha256", clerkSecret).update(`salonmind-clerk:${u.id}:${email.toLowerCase()}`).digest("base64url");
+          await fetch(`https://api.clerk.com/v1/users/${u.id}`, { method: "DELETE", headers: H });
+        }
+      }
+      if (!(await sb.auth.signInWithPassword({ email, password })).error) { await sb.rpc("delete_my_account"); console.log("cleaned up test account after failure"); }
     } catch { /* best effort */ }
   }
 } finally {
