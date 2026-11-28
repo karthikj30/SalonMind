@@ -13,7 +13,7 @@ import { ChatAnthropic } from "@langchain/anthropic";
  * `BaseChatModel`, so the chain is provider-agnostic and providers can be swapped by env var.
  *
  * Order (first healthy model wins; the rest are fallbacks):
- *   free   1. Groq           — gpt-oss-120b, then Qwen3 (text; Whisper for STT) GROQ_API_KEY
+ *   free   1. Groq           — gpt-oss-120b, then Qwen3, then gpt-oss-20b (Whisper for STT) GROQ_API_KEY
  *   free   2. Google Gemini  — Gemini 2.5 Flash (vision)                   GEMINI_API_KEY
  *   free   3. OpenRouter     — ":free" models (OpenAI-compatible)          OPENROUTER_API_KEY
  *   free   4. Hugging Face   — Inference Providers router                  HF_TOKEN
@@ -79,6 +79,9 @@ export const PROVIDERS: Provider[] = [
   // (otherwise a short reply can run out of tokens while still "thinking" and come back empty).
   groqProvider("groq", () => process.env.GROQ_MODEL || "openai/gpt-oss-120b"),
   groqProvider("groq", () => process.env.GROQ_FALLBACK_MODEL || "qwen/qwen3.8-27b"),
+  // Each Groq model has its own free per-minute token budget (8,000 tokens/min today), so a third model gives a
+  // burst of agent calls more room before anything falls back to the rules engine.
+  groqProvider("groq", () => process.env.GROQ_FALLBACK2_MODEL || "openai/gpt-oss-20b"),
   {
     name: "gemini", tier: "free", vision: true, enabled: () => !!process.env.GEMINI_API_KEY,
     label: () => process.env.GEMINI_MODEL || "gemini-2.5-flash",
