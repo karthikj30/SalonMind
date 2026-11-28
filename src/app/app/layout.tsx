@@ -19,15 +19,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { lang } = await getDict(); // same language cookie as the consumer pages
   const footer = (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5">
-          <span className={`h-2 w-2 rounded-full ${aiEnabled() ? "animate-pulse bg-emerald-400" : "bg-gold-400"}`} aria-hidden />
-          {aiEnabled() ? "AI models connected" : "Rules mode · add AI key"}
-        </p>
-        <span className="-mr-2 flex items-center">
-          <LanguagePicker value={lang} label="Language" reload className="text-onplum/80 hover:bg-white/10" />
-          <ThemeToggle className="text-onplum/80" />
-        </span>
+      {/* Two rows: the sidebar is narrow, and the language name plus the theme label do not fit beside the AI status */}
+      <p className="flex items-center gap-1.5">
+        <span className={`h-2 w-2 shrink-0 rounded-full ${aiEnabled() ? "animate-pulse bg-emerald-400" : "bg-gold-400"}`} aria-hidden />
+        {aiEnabled() ? "AI models connected" : "Rules mode · add AI key"}
+      </p>
+      <div className="-ml-2 flex flex-wrap items-center gap-1">
+        <LanguagePicker value={lang} label="Language" reload className="text-onplum/80 hover:bg-white/10" />
+        <ThemeToggle className="text-onplum/80 hover:bg-white/10" />
       </div>
       {salons.length > 1 && (
         <form action={switchSalon} className="flex gap-1">
